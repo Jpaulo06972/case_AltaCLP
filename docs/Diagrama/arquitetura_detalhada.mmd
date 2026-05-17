@@ -1,0 +1,89 @@
+graph TB
+    subgraph CAMPO["🏭 Camada de Campo (Clientes Industriais)"]
+        direction LR
+        CLP1["CLP Siemens S7\n(Structured Text)"]
+        CLP2["CLP Allen-Bradley\n(Structured Text)"]
+        Sensores["Sensores\nTemperatura · Pressão · Vibração\n12.500 leituras/dia/máquina"]
+        Sup["Supervisório\n(Lua / SCADA)"]
+        GW["Gateway Edge IoT\n(Agente GitOps)"]
+        
+        Sensores -->|Sinais 4-20mA / Digital| CLP1
+        Sensores -->|Sinais 4-20mA / Digital| CLP2
+        CLP1 <-->|Modbus TCP| Sup
+        CLP2 <-->|OPC UA| Sup
+        CLP1 -->|Hash do Código| GW
+        CLP2 -->|Hash do Código| GW
+    end
+
+    subgraph INFRA["⚙️ Infraestrutura AltaCLP (Existente)"]
+        direction LR
+        MQTT["Broker MQTT\n(Telemetria em tempo real)"]
+        PG[("PostgreSQL\nHistórico de Sensores\n+ Incidentes")]
+        GIT["Git Central\n(Structured Text + Lua)"]
+        ERP["ERP / CRM\n(Comercial)"]
+        
+        GW -->|Telemetria MQTT| MQTT
+        MQTT -->|Ingestão| PG
+        GW -.->|Verificação de Hash| GIT
+    end
+
+    subgraph PLATAFORMA["🤖 Plataforma HomoDeus (Nova)"]
+        direction TB
+        API["API Gateway\n(FastAPI + Python)"]
+        
+        subgraph MOD1["Módulo 1 · Preditiva Híbrida"]
+            TH["Motor de Thresholds\nDinâmicos por Máquina"]
+            ML["Isolation Forest\n(Anomaly Detection)"]
+            TH -->|Dados Limpos| ML
+        end
+        
+        subgraph MOD2["Módulo 2 · Comissionamento & Cotação"]
+            W["Whisper API\n(Transcrição de Áudio)"]
+            GPT["GPT-4o\n(Extração de Entidades)"]
+            BOM["Gerador de BOM\n+ Template Comissionamento"]
+            W --> GPT --> BOM
+        end
+        
+        subgraph MOD3["Módulo 3 · GitOps Auditoria"]
+            DIFF["Analisador de Diff\n(Campo vs. Git)"]
+            PR["Gerador de PR\n(Hotfix Automático)"]
+            DIFF --> PR
+        end
+        
+        API <--> MOD1
+        API <--> MOD2
+        API <--> MOD3
+    end
+
+    subgraph UI["📱 Interfaces de Usuário"]
+        direction LR
+        CEO["Dashboard CEO\n(Marcos · Roberto)"]
+        ENG["Dashboard Engenharia\n(Cláudia)"]
+        TEC["App Mobile Campo\n(Anderson · Técnicos)"]
+        VEN["Assistente Comercial\n(João Vendedor)"]
+    end
+
+    %% Fluxos de dados
+    PG -->|Histórico| ML
+    PG -->|Tempo Real| TH
+    GIT <-->|Leitura/Escrita| DIFF
+    GW -->|Hash Periódico| DIFF
+    ERP -->|Dados Comerciais| API
+    
+    %% Fluxos de usuário
+    VEN -->|Upload Áudio WhatsApp| W
+    API <--> CEO
+    API <--> ENG
+    API <--> TEC
+    API <--> VEN
+
+    %% Styling
+    classDef campo fill:#1a2035,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC
+    classDef infra fill:#1a2035,stroke:#94A3B8,stroke-width:1px,color:#F8FAFC
+    classDef plat fill:#1a2035,stroke:#10B981,stroke-width:2px,color:#F8FAFC
+    classDef ui fill:#1a2035,stroke:#60A5FA,stroke-width:1px,color:#F8FAFC
+    
+    class CLP1,CLP2,Sensores,Sup,GW campo
+    class MQTT,PG,GIT,ERP infra
+    class API,TH,ML,W,GPT,BOM,DIFF,PR plat
+    class CEO,ENG,TEC,VEN ui

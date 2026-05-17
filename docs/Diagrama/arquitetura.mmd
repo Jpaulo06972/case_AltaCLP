@@ -1,0 +1,71 @@
+graph TD
+    subgraph "Camada de Campo (Clientes)"
+        CLP["CLP (Structured Text)"]
+        Sensores["Sensores / Atuadores"]
+        Sup["Supervisório (Lua)"]
+        
+        Sensores -->|Sinais| CLP
+        CLP <-->|Controle| Sup
+        CLP -->|Modbus / OPC UA| Gateway["Gateway Edge (IoT)"]
+    end
+
+    subgraph "Infraestrutura Existente AltaCLP"
+        MQTT["Broker MQTT"]
+        PG[(PostgreSQL)]
+        Git["Git Central"]
+        ERP["ERP / CRM"]
+        
+        Gateway -->|Telemetria| MQTT
+        MQTT -->|Ingestão| PG
+    end
+
+    subgraph "Plataforma HomoDeus (Solução Proposta)"
+        API["API Gateway (FastAPI)"]
+        
+        subgraph "Módulo 1: Preditiva Híbrida"
+            Regras["Motor de Regras (Thresholds Dinâmicos)"]
+            IA_Pred["Modelo de IA Preditiva (Anomaly Detection)"]
+            Regras --> IA_Pred
+        end
+        
+        subgraph "Módulo 2: Comissionamento & Cotação"
+            Whisper["Transcritor de Áudio (Whisper)"]
+            LLM["LLM (GPT-4o) para Extração de Entidades"]
+            Template["Gerador de Templates Dinâmicos"]
+            Whisper --> LLM
+            LLM --> Template
+        end
+        
+        subgraph "Módulo 3: Auditoria de Código"
+            GitOps["Agente GitOps (Sync Checker)"]
+            Diff["Analisador de Diff (Campo vs Git)"]
+            GitOps --> Diff
+        end
+        
+        API <--> Módulo1
+        API <--> Módulo2
+        API <--> Módulo3
+    end
+
+    subgraph "Interface do Usuário (Frontend Web)"
+        Painel_Eng["Dashboard Engenharia (Cláudia)"]
+        Painel_Tec["App Mobile Técnico (Anderson/Campo)"]
+        Painel_Vendas["Dashboard Comercial (João)"]
+        Painel_Dir["Dashboard Diretoria (Marcos/Roberto)"]
+    end
+
+    %% Conexões de Dados
+    PG -->|Dados Históricos| IA_Pred
+    PG -->|Dados em Tempo Real| Regras
+    Git <-->|Leitura/Escrita| GitOps
+    Gateway -.->|Verificação de Hash| GitOps
+    
+    API <--> Painel_Eng
+    API <--> Painel_Tec
+    API <--> Painel_Vendas
+    API <--> Painel_Dir
+    
+    %% Fluxos de Negócio
+    Painel_Vendas -->|Upload Áudio WhatsApp| Whisper
+    Painel_Eng -->|Ajuste Threshold| Regras
+    Painel_Tec -->|Consulta Histórico/Contexto| API

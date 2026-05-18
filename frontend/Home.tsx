@@ -208,10 +208,31 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+import { api } from "./api";
+
 export default function Home() {
+  const [ceoData, setCeoData] = useState<any>(null);
+  const [engData, setEngData] = useState<any>(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [ceoRes, engRes] = await Promise.all([
+          api.getDashboardCEO(),
+          api.getDashboardEngenharia()
+        ]);
+        setCeoData(ceoRes);
+        setEngData(engRes);
+      } catch (error) {
+        console.error("Erro ao buscar dados da API:", error);
+      }
+    }
+    fetchData();
+  }, []);
+
   const unresolvedIncidents = incidents.filter((i) => !i.resolved);
-  const criticalMachines = machines.filter((m) => m.status === "critical");
-  const divergentMachines = machines.filter((m) => m.codeSync === "divergent");
+  const criticalMachines = engData ? engData.maquinas_status_grid.filter((m: any) => m.status === "critical") : machines.filter((m) => m.status === "critical");
+  const divergentMachines = engData ? engData.maquinas_status_grid.filter((m: any) => !m.codigo_sync) : machines.filter((m) => m.codeSync === "divergent");
 
   return (
     <div className="min-h-screen grid-bg">
@@ -307,27 +328,27 @@ export default function Home() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
             label="Falsos Alertas"
-            value={64}
+            value={ceoData?.kpis.taxa_falso_alerta.valor || 64}
             unit="%"
             trend="up"
             trendValue="+4pp vs. Q1"
             status="critical"
-            sublabel="R$ 31.400/mês em visitas perdidas"
+            sublabel={`R$ ${ceoData?.kpis.custo_visitas_falsas.valor || 31400}/mês em visitas perdidas`}
             icon={Activity}
           />
           <KpiCard
             label="Backlog Comissionamento"
-            value={26}
+            value={ceoData?.kpis.maquinas_backlog.total || 26}
             unit=" máq."
             trend="up"
             trendValue="+4 esta semana"
             status="critical"
-            sublabel="13 com atraso contratual"
+            sublabel={`${ceoData?.kpis.maquinas_backlog.com_atraso || 13} com atraso contratual`}
             icon={Wrench}
           />
           <KpiCard
             label="Drift de Código"
-            value={8}
+            value={engData?.kpis.maquinas_drift || 8}
             unit=" máq."
             trend="up"
             trendValue="4 incidentes/ano"
@@ -346,14 +367,13 @@ export default function Home() {
           />
         </div>
 
-        {/* Second row KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
             label="Receita em Risco"
-            value={780000}
+            value={ceoData?.kpis.risco_contratual.valor || 780000}
             unit=""
             status="critical"
-            sublabel="Anaclara Alimentos · jun/2026"
+            sublabel={`${ceoData?.kpis.risco_contratual.cliente || 'Anaclara Alimentos'} · jun/2026`}
             icon={DollarSign}
             animate={false}
           />

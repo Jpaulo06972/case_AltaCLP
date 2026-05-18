@@ -3,36 +3,41 @@
 
 import { useState } from "react";
 import { Zap, Mic, CheckCircle, Clock, FileText, ArrowRight } from "lucide-react";
+import { api } from "./api";
 
 const mockTranscription = `"Oi Cláudia, é o João. Então, o cliente da Anápolis, a Cerâmica Branco, eles querem automatizar a linha de prensagem deles. São três prensas hidráulicas, cada uma com motor de 75kW, precisam de controle de pressão e posição. Temperatura do molde tem que ser monitorada, faixa de 180 a 220 graus. Eles têm um supervisório antigo da Wonderware que querem manter, então precisa de comunicação OPC. Ah, e o cliente é do setor cerâmico, então tem bastante poeira, precisa de IP65 no mínimo nos CLPs. Prazo deles é setembro. Me faz uma cotação?"`;
-
-const mockBOM = [
-  { item: "CLP Siemens S7-1500 (CPU 1515-2 PN)", qty: 3, unit: "un", unitPrice: 8200, notes: "IP65 · Módulo de segurança integrado" },
-  { item: "Módulo de E/S Analógico (SM 1231)", qty: 6, unit: "un", unitPrice: 1200, notes: "Leitura temperatura + pressão" },
-  { item: "Módulo de E/S Digital (SM 1221)", qty: 3, unit: "un", unitPrice: 680, notes: "Sinais de posição e atuadores" },
-  { item: "Gateway OPC UA / OPC DA", qty: 1, unit: "un", unitPrice: 4500, notes: "Compatibilidade Wonderware legado" },
-  { item: "Sensor de Temperatura PT100 (IP65)", qty: 9, unit: "un", unitPrice: 380, notes: "3 por prensa · faixa 0-300°C" },
-  { item: "Transdutor de Pressão (0-400 bar)", qty: 6, unit: "un", unitPrice: 520, notes: "2 por prensa · 4-20mA" },
-  { item: "Encoder Linear (posição)", qty: 3, unit: "un", unitPrice: 1800, notes: "Resolução 0.1mm" },
-  { item: "Painel Elétrico IP65 (600x800mm)", qty: 3, unit: "un", unitPrice: 3200, notes: "Com climatização" },
-  { item: "Engenharia de Aplicação (comissionamento)", qty: 12, unit: "dias", unitPrice: 1800, notes: "3 prensas · 4 dias/prensa" },
-  { item: "Treinamento Operadores", qty: 2, unit: "dias", unitPrice: 2500, notes: "In-loco · Anápolis" },
-];
 
 export default function Cotacao() {
   const [step, setStep] = useState<"upload" | "transcribing" | "extracting" | "done">("upload");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [bomData, setBomData] = useState<any[]>([]);
 
-  const totalBOM = mockBOM.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
+  const totalBOM = bomData.reduce((sum, item) => sum + (item.quantidade || item.qty || 1) * (item.valor_unit || item.unitPrice || 0), 0);
 
-  const handleProcess = () => {
+  const handleProcess = async () => {
     setIsProcessing(true);
     setStep("transcribing");
-    setTimeout(() => setStep("extracting"), 2000);
-    setTimeout(() => {
+    
+    try {
+      // Simula tempo de transcrição
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setStep("extracting");
+      
+      const res = await api.processarCotacao({
+        transcricao_audio: mockTranscription,
+        vendedor: "João Vendedor",
+        cliente_nome: "Cerâmica Branco"
+      });
+      
+      if (res.bom) {
+        setBomData(res.bom);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
       setStep("done");
       setIsProcessing(false);
-    }, 4000);
+    }
   };
 
   return (
@@ -159,20 +164,20 @@ export default function Cotacao() {
                       </tr>
                     </thead>
                     <tbody>
-                      {mockBOM.map((item, i) => (
+                      {bomData.map((item, i) => (
                         <tr key={i} className="hover:bg-[oklch(0.16_0.008_260)] transition-colors"
-                          style={{ borderBottom: i < mockBOM.length - 1 ? "1px solid oklch(0.16 0.008 260)" : "none" }}>
+                          style={{ borderBottom: i < bomData.length - 1 ? "1px solid oklch(0.16 0.008 260)" : "none" }}>
                           <td className="px-3 py-2" style={{ color: "oklch(0.75 0.008 260)", fontFamily: "'Space Grotesk', sans-serif" }}>
-                            <div>{item.item}</div>
-                            <div className="text-xs mt-0.5" style={{ color: "oklch(0.45 0.01 260)" }}>{item.notes}</div>
+                            <div>{item.descricao || item.codigo || item.item}</div>
+                            <div className="text-xs mt-0.5" style={{ color: "oklch(0.45 0.01 260)" }}>{item.codigo ? `Cod: ${item.codigo}` : (item.notes || "")}</div>
                           </td>
-                          <td className="px-3 py-2 font-bold" style={{ color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{item.qty}</td>
-                          <td className="px-3 py-2" style={{ color: "oklch(0.55 0.012 260)", fontFamily: "'JetBrains Mono', monospace" }}>{item.unit}</td>
+                          <td className="px-3 py-2 font-bold" style={{ color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{item.quantidade || item.qty}</td>
+                          <td className="px-3 py-2" style={{ color: "oklch(0.55 0.012 260)", fontFamily: "'JetBrains Mono', monospace" }}>{item.unidade || item.unit}</td>
                           <td className="px-3 py-2" style={{ color: "oklch(0.65 0.008 260)", fontFamily: "'JetBrains Mono', monospace" }}>
-                            R$ {item.unitPrice.toLocaleString("pt-BR")}
+                            R$ {(item.valor_unit || item.unitPrice || 0).toLocaleString("pt-BR")}
                           </td>
                           <td className="px-3 py-2 font-semibold" style={{ color: "#10B981", fontFamily: "'JetBrains Mono', monospace" }}>
-                            R$ {(item.qty * item.unitPrice).toLocaleString("pt-BR")}
+                            R$ {((item.quantidade || item.qty || 1) * (item.valor_unit || item.unitPrice || 0)).toLocaleString("pt-BR")}
                           </td>
                         </tr>
                       ))}

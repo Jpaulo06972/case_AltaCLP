@@ -2,14 +2,33 @@
 // Shows the code drift problem and the automated audit solution
 
 import { GitBranch, AlertTriangle, CheckCircle, XCircle, HelpCircle } from "lucide-react";
-import { machines, incidents } from "@/lib/mockData";
+import { machines, incidents } from "./mockData";
+import { useState, useEffect } from "react";
+import { api } from "./api";
 
 export default function Codigo() {
-  const driftMachines = machines.filter((m) => m.codeSync === "divergent");
-  const unknownMachines = machines.filter((m) => m.codeSync === "unknown");
-  const syncMachines = machines.filter((m) => m.codeSync === "ok");
+  const [gitopsStats, setGitopsStats] = useState<any>(null);
+  const [drifts, setDrifts] = useState<any>(null);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const stats = await api.getGitOpsEstatisticas();
+        const ativos = await api.getGitOpsDriftsAtivos();
+        setGitopsStats(stats);
+        setDrifts(ativos);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    loadData();
+  }, []);
+
+  const driftCount = gitopsStats?.drifts_ativos || machines.filter((m) => m.codeSync === "divergent").length;
+  const unknownCount = machines.filter((m) => m.codeSync === "unknown").length;
+  const syncCount = gitopsStats ? 50 - gitopsStats.drifts_ativos : machines.filter((m) => m.codeSync === "ok").length;
   const codeIncidents = incidents.filter((i) => i.type === "code_drift");
-  const totalLoss = codeIncidents.reduce((sum, i) => sum + i.loss, 0);
+  const totalLoss = gitopsStats?.prejuizo_historico || codeIncidents.reduce((sum, i) => sum + i.loss, 0);
 
   return (
     <div className="min-h-screen">
@@ -25,7 +44,7 @@ export default function Codigo() {
         </div>
         <div className="flex items-center gap-2 text-xs px-3 py-1 rounded" style={{ background: "oklch(0.6 0.22 25 / 0.15)", color: "#EF4444", fontFamily: "'JetBrains Mono', monospace" }}>
           <AlertTriangle size={12} />
-          {driftMachines.length} MÁQUINAS COM DRIFT
+          {driftCount} MÁQUINAS COM DRIFT
         </div>
       </header>
 
@@ -37,7 +56,7 @@ export default function Codigo() {
               <XCircle size={14} style={{ color: "#EF4444" }} />
               <span className="text-xs font-semibold uppercase" style={{ color: "oklch(0.55 0.012 260)", fontFamily: "'Space Grotesk', sans-serif" }}>Drift Confirmado</span>
             </div>
-            <div className="text-3xl font-bold" style={{ color: "#EF4444", fontFamily: "'JetBrains Mono', monospace" }}>{driftMachines.length}</div>
+            <div className="text-3xl font-bold" style={{ color: "#EF4444", fontFamily: "'JetBrains Mono', monospace" }}>{driftCount}</div>
             <div className="text-xs mt-1" style={{ color: "oklch(0.45 0.01 260)" }}>máquinas com código divergente</div>
           </div>
           <div className="p-5 rounded" style={{ background: "oklch(0.13 0.008 260)", border: "1px solid #F59E0B40" }}>
@@ -45,7 +64,7 @@ export default function Codigo() {
               <HelpCircle size={14} style={{ color: "#F59E0B" }} />
               <span className="text-xs font-semibold uppercase" style={{ color: "oklch(0.55 0.012 260)", fontFamily: "'Space Grotesk', sans-serif" }}>Sem Verificação</span>
             </div>
-            <div className="text-3xl font-bold" style={{ color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{unknownMachines.length}</div>
+            <div className="text-3xl font-bold" style={{ color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{unknownCount}</div>
             <div className="text-xs mt-1" style={{ color: "oklch(0.45 0.01 260)" }}>máquinas sem auditoria ativa</div>
           </div>
           <div className="p-5 rounded" style={{ background: "oklch(0.13 0.008 260)", border: "1px solid #10B98140" }}>
@@ -53,7 +72,7 @@ export default function Codigo() {
               <CheckCircle size={14} style={{ color: "#10B981" }} />
               <span className="text-xs font-semibold uppercase" style={{ color: "oklch(0.55 0.012 260)", fontFamily: "'Space Grotesk', sans-serif" }}>Sincronizadas</span>
             </div>
-            <div className="text-3xl font-bold" style={{ color: "#10B981", fontFamily: "'JetBrains Mono', monospace" }}>{syncMachines.length}</div>
+            <div className="text-3xl font-bold" style={{ color: "#10B981", fontFamily: "'JetBrains Mono', monospace" }}>{syncCount}</div>
             <div className="text-xs mt-1" style={{ color: "oklch(0.45 0.01 260)" }}>código campo = Git central</div>
           </div>
           <div className="p-5 rounded" style={{ background: "oklch(0.13 0.008 260)", border: "1px solid #EF444440" }}>

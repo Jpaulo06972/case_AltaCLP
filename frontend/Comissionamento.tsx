@@ -1,8 +1,10 @@
 // AltaCLP Intelligence — Comissionamento
 // Shows the backlog crisis and the AI-assisted commissioning solution
 
+import { useState, useEffect } from "react";
 import { Wrench, AlertTriangle, Clock, CheckCircle, DollarSign } from "lucide-react";
-import { commissioningBacklog } from "@/lib/mockData";
+import { commissioningBacklog } from "./mockData";
+import { api } from "./api";
 
 const statusConfig = {
   fine: { label: "MULTA ATIVA", color: "#EF4444", bg: "oklch(0.6 0.22 25 / 0.15)" },
@@ -12,9 +14,26 @@ const statusConfig = {
 };
 
 export default function Comissionamento() {
-  const totalRevenue = commissioningBacklog.reduce((sum, i) => sum + i.revenue, 0);
-  const fineCount = commissioningBacklog.filter((i) => i.status === "fine").length;
-  const delayedCount = commissioningBacklog.filter((i) => i.status === "delayed" || i.status === "fine").length;
+  const [comissionamentos, setComissionamentos] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.getComissionamentos().then(res => setComissionamentos(res.dados || [])).catch(console.error);
+  }, []);
+
+  const dataToShow = comissionamentos.length > 0 ? comissionamentos.map((c, i) => ({
+    id: `OS-${c.id.substring(0, 4).toUpperCase()}`,
+    machine: "CLP (Comissionamento)",
+    client: "Cliente da API", // A API retorna apenas cliente_id, ideal seria join, mas p/ MVP é mock
+    status: c.dias_atraso > 15 ? "fine" : c.dias_atraso > 0 ? "delayed" : "scheduled",
+    daysWaiting: c.dias_atraso,
+    contractualDeadline: c.prazo_limite_cliente || "Sem prazo definido",
+    engineer: c.engenheiro_responsavel,
+    revenue: c.valor_contrato
+  })) : commissioningBacklog;
+
+  const totalRevenue = dataToShow.reduce((sum, i) => sum + i.revenue, 0);
+  const fineCount = dataToShow.filter((i) => i.status === "fine").length;
+  const delayedCount = dataToShow.filter((i) => i.status === "delayed" || i.status === "fine").length;
 
   return (
     <div className="min-h-screen">
@@ -86,7 +105,7 @@ export default function Comissionamento() {
         <div className="rounded overflow-hidden" style={{ background: "oklch(0.13 0.008 260)", border: "1px solid oklch(0.22 0.008 260)" }}>
           <div className="px-5 py-3 border-b" style={{ borderColor: "oklch(0.18 0.008 260)" }}>
             <h2 className="text-sm font-semibold" style={{ color: "oklch(0.95 0.003 260)", fontFamily: "'Space Grotesk', sans-serif" }}>
-              Backlog Atual — {commissioningBacklog.length} Máquinas
+              Backlog Atual — {dataToShow.length} Máquinas
             </h2>
           </div>
           <div className="overflow-x-auto">
@@ -102,11 +121,11 @@ export default function Comissionamento() {
                 </tr>
               </thead>
               <tbody>
-                {commissioningBacklog.map((item, i) => {
-                  const sc = statusConfig[item.status];
+                {dataToShow.map((item, i) => {
+                  const sc = statusConfig[item.status as keyof typeof statusConfig] || statusConfig.scheduled;
                   return (
                     <tr key={item.id} className="hover:bg-[oklch(0.16_0.008_260)] transition-colors"
-                      style={{ borderBottom: i < commissioningBacklog.length - 1 ? "1px solid oklch(0.16 0.008 260)" : "none" }}>
+                      style={{ borderBottom: i < dataToShow.length - 1 ? "1px solid oklch(0.16 0.008 260)" : "none" }}>
                       <td className="px-4 py-3 font-bold" style={{ color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{item.id}</td>
                       <td className="px-4 py-3" style={{ color: "oklch(0.85 0.005 260)", fontFamily: "'Space Grotesk', sans-serif" }}>{item.machine}</td>
                       <td className="px-4 py-3" style={{ color: "oklch(0.65 0.008 260)", fontFamily: "'Space Grotesk', sans-serif" }}>{item.client}</td>

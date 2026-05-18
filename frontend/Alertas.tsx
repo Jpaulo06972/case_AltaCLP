@@ -1,10 +1,11 @@
 // AltaCLP Intelligence — Alertas & Preditiva
 // Shows the false alert problem and the hybrid solution (dynamic thresholds + AI)
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Activity, AlertTriangle, CheckCircle, Filter, TrendingDown } from "lucide-react";
-import { machines } from "@/lib/mockData";
+import { machines } from "./mockData";
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { api } from "./api";
 
 const thresholdData = [
   { machine: "M-VH-118", type: "Temperatura", current: 85, suggested: 95, unit: "°C", client: "Vinhal Alimentos" },
@@ -24,6 +25,20 @@ const radarData = [
 
 export default function Alertas() {
   const [activeTab, setActiveTab] = useState<"overview" | "thresholds" | "ai">("overview");
+  const [realAlertas, setRealAlertas] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.getAlertas().then(res => setRealAlertas(res.alertas || [])).catch(console.error);
+  }, []);
+
+  const alertsToShow = realAlertas.length > 0 ? realAlertas.slice(0, 10).map(a => ({
+    machine: a.maquina_codigo || "M-UNK",
+    client: "Cliente",
+    type: a.tipo,
+    current: a.valor_leitura,
+    suggested: typeof a.valor_leitura === 'number' ? Math.round(a.valor_leitura * 1.15) : 0,
+    unit: a.unidade_medida || "un"
+  })) : thresholdData;
 
   const tabs = [
     { id: "overview", label: "Visão Geral" },
@@ -217,9 +232,9 @@ export default function Alertas() {
                 </tr>
               </thead>
               <tbody>
-                {thresholdData.map((t, i) => (
+                {alertsToShow.map((t, i) => (
                   <tr key={i} className="hover:bg-[oklch(0.16_0.008_260)] transition-colors"
-                    style={{ borderBottom: i < thresholdData.length - 1 ? "1px solid oklch(0.16 0.008 260)" : "none" }}>
+                    style={{ borderBottom: i < alertsToShow.length - 1 ? "1px solid oklch(0.16 0.008 260)" : "none" }}>
                     <td className="px-4 py-3 font-bold" style={{ color: "#F59E0B", fontFamily: "'JetBrains Mono', monospace" }}>{t.machine}</td>
                     <td className="px-4 py-3" style={{ color: "oklch(0.75 0.008 260)", fontFamily: "'Space Grotesk', sans-serif" }}>{t.client}</td>
                     <td className="px-4 py-3" style={{ color: "oklch(0.65 0.008 260)", fontFamily: "'Space Grotesk', sans-serif" }}>{t.type}</td>

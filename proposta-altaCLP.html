@@ -1,0 +1,1891 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plataforma de Inteligência Operacional — HomoDeus × AltaCLP</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-white: #FFFFFF;
+      --bg-gray: #F5F5F7;
+      --text-primary: #1D1D1F;
+      --text-secondary: #6E6E73;
+      --blue: #0071E3;
+      --blue-hover: #0077ED;
+      --red: #FF3B30;
+      --green: #30D158;
+      --orange: #FF9500;
+      --border: #D2D2D7;
+      --glass: rgba(255, 255, 255, 0.8);
+      --shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+      --shadow-hover: 0 8px 40px rgba(0, 0, 0, 0.12);
+      --radius-card: 18px;
+      --radius-pill: 980px;
+      --radius-input: 12px;
+      --max-width: 1200px;
+      --section-pad: 120px;
+      --font: -apple-system, 'SF Pro Display', 'SF Pro Text', BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      font-size: 17px;
+      font-weight: 400;
+      color: var(--text-primary);
+      background: var(--bg-white);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding-left: clamp(20px, 5vw, 80px);
+      padding-right: clamp(20px, 5vw, 80px);
+    }
+
+    /* API Key bar */
+    .api-bar {
+      background: var(--bg-gray);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 0;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+
+    .api-bar-inner {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .api-bar label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .api-bar input {
+      flex: 1;
+      min-width: 200px;
+      padding: 10px 16px;
+      border-radius: var(--radius-input);
+      border: 1px solid var(--border);
+      font-size: 15px;
+      font-family: var(--font);
+      background: var(--bg-white);
+    }
+
+    .api-bar input:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.2);
+    }
+
+    .api-status {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .api-status.ready { color: var(--green); font-weight: 600; }
+
+    /* Navbar */
+    .navbar {
+      position: sticky;
+      top: 49px;
+      z-index: 100;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+      transition: box-shadow 0.3s ease;
+    }
+
+    .navbar.scrolled { box-shadow: var(--shadow); }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+      gap: 24px;
+    }
+
+    .nav-logo {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+      flex-shrink: 0;
+    }
+
+    .nav-links {
+      display: flex;
+      list-style: none;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .nav-links::-webkit-scrollbar { display: none; }
+
+    .nav-links a {
+      position: relative;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-decoration: none;
+      white-space: nowrap;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active { color: var(--text-primary); }
+
+    .nav-links a.active::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      left: 14px;
+      right: 14px;
+      height: 2px;
+      background: var(--blue);
+      border-radius: 1px;
+      animation: underlineIn 0.3s ease;
+    }
+
+    @keyframes underlineIn {
+      from { transform: scaleX(0); }
+      to { transform: scaleX(1); }
+    }
+
+    /* Sections */
+    section {
+      padding-top: var(--section-pad);
+      padding-bottom: var(--section-pad);
+    }
+
+    section.bg-gray { background: var(--bg-gray); }
+    section.bg-white { background: var(--bg-white); }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+      will-change: opacity, transform;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    h1 {
+      font-size: clamp(40px, 6vw, 56px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.08;
+    }
+
+    h2 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.12;
+      margin-bottom: 16px;
+    }
+
+    h3 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .section-lead {
+      font-size: 19px;
+      color: var(--text-secondary);
+      max-width: 640px;
+      margin-bottom: 48px;
+    }
+
+    .caption {
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--text-secondary);
+    }
+
+    /* Hero */
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      padding-top: 80px;
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #FFFFFF 0%, #F5F5F7 50%, #FFFFFF 100%);
+      z-index: 0;
+    }
+
+    #hero-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      opacity: 0.5;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      width: 100%;
+    }
+
+    .hero-title {
+      font-size: clamp(48px, 8vw, 88px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      margin-bottom: 24px;
+      background: linear-gradient(180deg, #1D1D1F 0%, #3a3a3c 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(15px, 2vw, 19px);
+      color: var(--text-secondary);
+      margin-bottom: 48px;
+    }
+
+    .hero-metrics {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 32px;
+      margin-bottom: 48px;
+    }
+
+    .hero-metric {
+      text-align: center;
+    }
+
+    .hero-metric-value {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--blue);
+    }
+
+    .hero-metric-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 28px;
+      border-radius: var(--radius-pill);
+      font-size: 17px;
+      font-weight: 600;
+      font-family: var(--font);
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s;
+      will-change: transform;
+    }
+
+    .btn-primary {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--blue-hover);
+      transform: scale(1.02);
+      box-shadow: 0 4px 24px rgba(0, 113, 227, 0.35);
+    }
+
+    .btn-large {
+      padding: 18px 40px;
+      font-size: 19px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-white);
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow);
+      padding: 32px;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      will-change: transform;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    /* Comparison table */
+    .compare-wrap {
+      overflow-x: auto;
+      margin-bottom: 48px;
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow);
+    }
+
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-white);
+      min-width: 600px;
+    }
+
+    .compare-table th,
+    .compare-table td {
+      padding: 20px 24px;
+      text-align: left;
+      border-bottom: 1px solid var(--bg-gray);
+    }
+
+    .compare-table th {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }
+
+    .compare-table tr:last-child td { border-bottom: none; }
+
+    .compare-table .dim {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .col-perception {
+      color: var(--red);
+      font-weight: 600;
+    }
+
+    .col-reality {
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    .compare-table tbody tr {
+      opacity: 0;
+      transform: translateX(-20px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .compare-table tbody tr.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    /* Stakeholder avatar */
+    .avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 16px;
+    }
+
+    .avatar-mt { background: linear-gradient(135deg, #0071E3, #5856D6); }
+    .avatar-rb { background: linear-gradient(135deg, #30D158, #34C759); }
+    .avatar-cs { background: linear-gradient(135deg, #FF9500, #FF3B30); }
+
+    .stakeholder-name {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .stakeholder-role {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+
+    .stakeholder-want,
+    .stakeholder-fear {
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .stakeholder-want strong,
+    .stakeholder-fear strong {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .stakeholder-fear strong { color: var(--orange); }
+
+    /* Alert banner */
+    .alert-banner {
+      background: linear-gradient(135deg, rgba(255, 149, 0, 0.12), rgba(255, 59, 48, 0.08));
+      border: 1px solid rgba(255, 149, 0, 0.3);
+      border-radius: var(--radius-card);
+      padding: 28px 32px;
+      text-align: center;
+      margin-top: 48px;
+    }
+
+    .alert-banner p {
+      font-size: clamp(20px, 3vw, 28px);
+      font-weight: 700;
+      color: var(--orange);
+      letter-spacing: -0.02em;
+    }
+
+    /* Module cards */
+    .module-icon {
+      width: 56px;
+      height: 56px;
+      margin-bottom: 20px;
+      color: var(--blue);
+    }
+
+    .module-card h3 {
+      font-size: 22px;
+      margin-bottom: 12px;
+    }
+
+    .module-card p {
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+
+    .tech-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tech-tag {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      background: var(--bg-gray);
+      border-radius: var(--radius-pill);
+      color: var(--text-primary);
+    }
+
+    /* Progress bar */
+    .progress-section {
+      margin: 48px 0;
+      padding: 32px;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border-radius: var(--radius-card);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .progress-label {
+      font-size: 19px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .progress-track {
+      height: 12px;
+      background: var(--bg-gray);
+      border-radius: var(--radius-pill);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, var(--blue), var(--green));
+      border-radius: var(--radius-pill);
+      transition: width 1.2s ease;
+    }
+
+    .progress-markers {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* Tech table */
+    .tech-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-white);
+      border-radius: var(--radius-card);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .tech-table th,
+    .tech-table td {
+      padding: 18px 24px;
+      text-align: left;
+      border-bottom: 1px solid var(--bg-gray);
+    }
+
+    .tech-table th {
+      background: var(--bg-gray);
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .tech-table tr:last-child td { border-bottom: none; }
+
+    /* Strategy */
+    .pill {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      background: var(--bg-gray);
+      border-radius: var(--radius-pill);
+      margin-bottom: 16px;
+      color: var(--text-secondary);
+    }
+
+    .quote-block {
+      font-size: clamp(18px, 2.5vw, 24px);
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--text-primary);
+      position: relative;
+      padding-left: 24px;
+      border-left: 4px solid var(--blue);
+      margin: 20px 0;
+    }
+
+    .quote-block::before {
+      content: '"';
+      position: absolute;
+      left: -8px;
+      top: -20px;
+      font-size: 64px;
+      color: var(--blue);
+      opacity: 0.2;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    /* Accordion */
+    .accordion-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .accordion-item {
+      background: var(--bg-white);
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .accordion-trigger {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 24px 28px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-align: left;
+      font-family: var(--font);
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .accordion-trigger:hover { background: var(--bg-gray); }
+
+    .accordion-icon {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      transition: transform 0.4s ease;
+    }
+
+    .accordion-item.open .accordion-icon { transform: rotate(45deg); }
+
+    .accordion-panel {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease;
+    }
+
+    .accordion-panel-inner {
+      padding: 0 28px 24px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* Timeline */
+    .timeline-wrap {
+      overflow-x: auto;
+      padding-bottom: 24px;
+      margin-bottom: 48px;
+    }
+
+    .timeline {
+      display: flex;
+      gap: 0;
+      min-width: 900px;
+      position: relative;
+      padding-top: 40px;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      top: 52px;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--blue), var(--green), #5856D6, var(--orange));
+      border-radius: 2px;
+    }
+
+    .timeline-item {
+      flex: 1;
+      text-align: center;
+      padding: 0 12px;
+      position: relative;
+    }
+
+    .timeline-dot {
+      width: 16px;
+      height: 16px;
+      background: var(--blue);
+      border: 3px solid var(--bg-white);
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      position: relative;
+      z-index: 1;
+      box-shadow: 0 0 0 4px var(--bg-gray);
+    }
+
+    .timeline-item.future .timeline-dot {
+      background: var(--text-secondary);
+    }
+
+    .timeline-item h4 {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .timeline-item p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .timeline-price {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--blue);
+      margin-top: 8px;
+    }
+
+    /* Phase table */
+    .phase-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-white);
+      border-radius: var(--radius-card);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      margin-bottom: 48px;
+    }
+
+    .phase-table th,
+    .phase-table td {
+      padding: 20px 24px;
+      text-align: left;
+      border-bottom: 1px solid var(--bg-gray);
+    }
+
+    .phase-table th {
+      background: var(--bg-gray);
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .phase-table .price {
+      font-weight: 700;
+      color: var(--blue);
+      white-space: nowrap;
+    }
+
+    /* ROI card */
+    .roi-card {
+      background: linear-gradient(135deg, #1D1D1F 0%, #2c2c2e 100%);
+      color: #fff;
+      border-radius: var(--radius-card);
+      padding: 48px;
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .roi-card h3 {
+      color: #fff;
+      margin-bottom: 32px;
+      font-size: 32px;
+    }
+
+    .roi-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+
+    .roi-box {
+      padding: 24px 32px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-card);
+      backdrop-filter: blur(10px);
+    }
+
+    .roi-box .value {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .roi-box .label {
+      font-size: 13px;
+      opacity: 0.7;
+      margin-top: 4px;
+    }
+
+    .roi-arrow {
+      font-size: 32px;
+      opacity: 0.5;
+    }
+
+    .roi-highlight {
+      font-size: 56px;
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: -0.03em;
+      margin-top: 24px;
+    }
+
+    .roi-note {
+      margin-top: 16px;
+      font-size: 15px;
+      opacity: 0.8;
+    }
+
+    /* Payment schedule */
+    .payment-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .payment-card {
+      background: var(--bg-white);
+      border-radius: var(--radius-card);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      border-left: 4px solid var(--blue);
+    }
+
+    .payment-card h4 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .payment-card .amount {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--blue);
+      margin: 12px 0;
+    }
+
+    /* Chat */
+    .chat-container {
+      background: var(--bg-gray);
+      border-radius: var(--radius-card);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .chat-messages {
+      height: 420px;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .chat-msg {
+      display: flex;
+      gap: 10px;
+      max-width: 85%;
+      animation: msgIn 0.3s ease;
+    }
+
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .chat-msg.user {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+
+    .chat-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .chat-avatar.bot { background: var(--blue); }
+    .chat-avatar.user { background: var(--green); }
+
+    .chat-bubble-wrap { display: flex; flex-direction: column; }
+
+    .chat-bubble {
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .chat-msg.assistant .chat-bubble {
+      background: var(--bg-white);
+      color: var(--text-primary);
+      border-bottom-left-radius: 4px;
+    }
+
+    .chat-msg.user .chat-bubble {
+      background: var(--blue);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-time {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      padding: 0 4px;
+    }
+
+    .chat-msg.user .chat-time { text-align: right; }
+
+    .chat-loading .chat-bubble {
+      display: flex;
+      gap: 4px;
+      padding: 16px 20px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      background: var(--text-secondary);
+      border-radius: 50%;
+      animation: dotBounce 1.4s infinite ease-in-out both;
+    }
+
+    .dot:nth-child(1) { animation-delay: -0.32s; }
+    .dot:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes dotBounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    .chat-input-area {
+      display: flex;
+      gap: 12px;
+      padding: 16px;
+      background: var(--bg-white);
+      border-top: 1px solid var(--border);
+    }
+
+    .chat-input-area input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-input);
+      font-size: 15px;
+      font-family: var(--font);
+    }
+
+    .chat-input-area input:focus {
+      outline: none;
+      border-color: var(--blue);
+    }
+
+    .chat-input-area input:disabled {
+      background: var(--bg-gray);
+      cursor: not-allowed;
+    }
+
+    .chat-send {
+      padding: 12px 20px;
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: background 0.2s;
+    }
+
+    .chat-send:hover:not(:disabled) { background: var(--blue-hover); }
+    .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .chat-hint {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 12px;
+    }
+
+    /* Footer */
+    footer {
+      background: var(--bg-gray);
+      padding: 80px 0;
+      text-align: center;
+    }
+
+    footer p {
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      font-size: 15px;
+    }
+
+    footer .caption {
+      max-width: 560px;
+      margin: 0 auto 32px;
+      line-height: 1.5;
+    }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+      :root { --section-pad: 80px; }
+
+      .nav-inner { height: auto; padding: 12px 0; flex-wrap: wrap; }
+      .navbar { top: 0; }
+      .api-bar { position: relative; }
+
+      .hero-metrics { gap: 20px; }
+      .roi-flow { flex-direction: column; }
+      .roi-arrow { transform: rotate(90deg); }
+      .card-grid { grid-template-columns: 1fr; }
+
+      .chat-messages { height: 360px; }
+      .chat-msg { max-width: 92%; }
+
+      .accordion-trigger { font-size: 15px; padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- API Key -->
+  <div class="api-bar" aria-label="Configuração da API">
+    <div class="container api-bar-inner">
+      <label for="api-key">Anthropic API Key</label>
+      <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off" aria-describedby="api-status">
+      <span id="api-status" class="api-status">Insira sua chave para usar o assistente</span>
+    </div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="navbar" id="navbar" aria-label="Navegação principal">
+    <div class="container nav-inner">
+      <a href="#hero" class="nav-logo">HomoDeus</a>
+      <ul class="nav-links" role="list">
+        <li><a href="#problema" data-section="problema">Problema</a></li>
+        <li><a href="#solucao" data-section="solucao">Solução</a></li>
+        <li><a href="#estrategia" data-section="estrategia">Estratégia</a></li>
+        <li><a href="#objecoes" data-section="objecoes">Objeções</a></li>
+        <li><a href="#investimento" data-section="investimento">Investimento</a></li>
+        <li><a href="#assistente" data-section="assistente">Assistente IA</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- 1. HERO -->
+  <section id="hero" class="bg-white" aria-label="Capa da proposta">
+    <div class="hero-bg"></div>
+    <canvas id="hero-canvas" aria-hidden="true"></canvas>
+    <div class="container hero-content reveal">
+      <h1 class="hero-title">Plataforma de Inteligência Operacional</h1>
+      <p class="hero-subtitle">HomoDeus × AltaCLP Indústria S.A. · Versão 1.0 · 17 de maio de 2026</p>
+      <div class="hero-metrics">
+        <div class="hero-metric reveal">
+          <div class="hero-metric-value" data-counter="1320000" data-prefix="R$ " data-suffix="" data-format="currency">R$ 0</div>
+          <div class="hero-metric-label">retorno no 1º ano</div>
+        </div>
+        <div class="hero-metric reveal">
+          <div class="hero-metric-value" data-counter="8.8" data-suffix="x" data-decimals="1">0x</div>
+          <div class="hero-metric-label">ROI</div>
+        </div>
+        <div class="hero-metric reveal">
+          <div class="hero-metric-value" data-counter="12" data-suffix=" sem">0 sem</div>
+          <div class="hero-metric-label">de implementação</div>
+        </div>
+      </div>
+      <a href="#problema" class="btn btn-primary" aria-label="Ver a proposta completa">Ver a Proposta</a>
+    </div>
+  </section>
+
+  <!-- 2. PROBLEMA -->
+  <section id="problema" class="bg-gray" aria-labelledby="problema-title">
+    <div class="container">
+      <h2 id="problema-title" class="reveal">O que o Marcos vê vs. o que existe</h2>
+      <p class="section-lead reveal">A percepção do CEO subestima o custo real da operação. Os números abaixo vêm da análise HomoDeus sobre dados da AltaCLP.</p>
+
+      <div class="compare-wrap reveal">
+        <table class="compare-table" aria-label="Tabela comparativa percepção versus realidade">
+          <thead>
+            <tr>
+              <th>Dimensão</th>
+              <th class="col-perception">Visão do Marcos</th>
+              <th class="col-reality">Realidade</th>
+            </tr>
+          </thead>
+          <tbody id="compare-rows">
+            <tr data-delay="0">
+              <td class="dim">Taxa de falsos alertas</td>
+              <td class="col-perception">60%</td>
+              <td class="col-reality">64%</td>
+            </tr>
+            <tr data-delay="1">
+              <td class="dim">Custo mensal de visitas falsas</td>
+              <td class="col-perception">R$ 27.000</td>
+              <td class="col-reality">R$ 31.400</td>
+            </tr>
+            <tr data-delay="2">
+              <td class="dim">Backlog de comissionamento</td>
+              <td class="col-perception">22 máquinas</td>
+              <td class="col-reality">26 máquinas</td>
+            </tr>
+            <tr data-delay="3">
+              <td class="dim">Tempo por comissionamento</td>
+              <td class="col-perception">3-4 dias</td>
+              <td class="col-reality">6 dias</td>
+            </tr>
+            <tr data-delay="4">
+              <td class="dim">Incidentes por drift de código</td>
+              <td class="col-perception">3 em 2026</td>
+              <td class="col-reality">4 em 2026</td>
+            </tr>
+            <tr data-delay="5">
+              <td class="dim">Prejuízo por incidentes</td>
+              <td class="col-perception">~R$ 220k</td>
+              <td class="col-reality">~R$ 250k</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card-grid">
+        <article class="card reveal">
+          <div class="avatar avatar-mt" aria-hidden="true">MT</div>
+          <h3 class="stakeholder-name">Marcos Tedesco</h3>
+          <p class="stakeholder-role">CEO · 70% das ações</p>
+          <p class="stakeholder-want"><strong>Quer</strong> Cortar R$ 31.400/mês de visitas falsas e provar ROI rápido</p>
+          <p class="stakeholder-fear"><strong>Teme</strong> Projeto sem retorno mensurável e mais uma iniciativa de TI que não fecha</p>
+        </article>
+        <article class="card reveal">
+          <div class="avatar avatar-rb" aria-hidden="true">RB</div>
+          <h3 class="stakeholder-name">Roberto</h3>
+          <p class="stakeholder-role">CFO · 30% das ações</p>
+          <p class="stakeholder-want"><strong>Quer</strong> Due diligence sólida e valuation 2-3x maior para futura venda ou captação</p>
+          <p class="stakeholder-fear"><strong>Teme</strong> Estouro de orçamento e compromissos financeiros sem entrega por fase</p>
+        </article>
+        <article class="card reveal">
+          <div class="avatar avatar-cs" aria-hidden="true">CS</div>
+          <h3 class="stakeholder-name">Cláudia Santarém</h3>
+          <p class="stakeholder-role">Engenharia</p>
+          <p class="stakeholder-want"><strong>Quer</strong> Resolver o backlog de 26 máquinas e reduzir comissionamento de 6 para 2 dias</p>
+          <p class="stakeholder-fear"><strong>Teme</strong> Promessas de IA com dados ruins e mais um projeto que a engenharia precisa sustentar sozinha</p>
+        </article>
+      </div>
+
+      <div class="alert-banner reveal" role="alert">
+        <p>R$ 780.000 em risco na Anaclara Alimentos</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. SOLUÇÃO -->
+  <section id="solucao" class="bg-white" aria-labelledby="solucao-title">
+    <div class="container">
+      <h2 id="solucao-title" class="reveal">Não é IA por modismo. É IA onde os dados permitem.</h2>
+      <p class="section-lead reveal">Três módulos integrados que atacam as dores reais da AltaCLP — com tecnologia proporcional à maturidade dos dados em cada etapa.</p>
+
+      <div class="card-grid">
+        <article class="card module-card reveal">
+          <svg class="module-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+          <h3>Assistente de Comissionamento e Cotação</h3>
+          <p>Áudio do WhatsApp convertido em BOM automática via Whisper + GPT-4o. O comissionamento cai de 6 para 2 dias, atacando diretamente o backlog de 26 máquinas.</p>
+          <div class="tech-tags">
+            <span class="tech-tag">Whisper</span>
+            <span class="tech-tag">GPT-4o</span>
+            <span class="tech-tag">WhatsApp API</span>
+          </div>
+        </article>
+        <article class="card module-card reveal">
+          <svg class="module-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          <h3>Preditiva Híbrida</h3>
+          <p>Thresholds dinâmicos entregam 30% de melhora imediata nos falsos alertas. Isolation Forest atinge 65% de redução em regime pleno, sem depender de dados perfeitos desde o dia 1.</p>
+          <div class="tech-tags">
+            <span class="tech-tag">Thresholds dinâmicos</span>
+            <span class="tech-tag">Isolation Forest</span>
+            <span class="tech-tag">MQTT</span>
+          </div>
+        </article>
+        <article class="card module-card reveal">
+          <svg class="module-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+          <h3>Auditoria GitOps de Campo</h3>
+          <p>Agente no Gateway IoT gera hash do CLP a cada 6h via OPC UA. Alerta antes do deploy — eliminando os 4 incidentes de drift de código registrados em 2026 (~R$ 250k de prejuízo).</p>
+          <div class="tech-tags">
+            <span class="tech-tag">OPC UA</span>
+            <span class="tech-tag">Gateway IoT</span>
+            <span class="tech-tag">GitOps</span>
+          </div>
+        </article>
+      </div>
+
+      <div class="progress-section reveal">
+        <p class="progress-label">30% melhora imediata → 65% em regime pleno</p>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-markers">
+          <span>Fase 1 — Thresholds</span>
+          <span>Fase 3 — Isolation Forest</span>
+        </div>
+      </div>
+
+      <div class="compare-wrap reveal" style="margin-top:48px">
+        <table class="tech-table" aria-label="Tecnologias e justificativas">
+          <thead>
+            <tr>
+              <th>Tecnologia</th>
+              <th>Justificativa na AltaCLP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Whisper</strong></td>
+              <td>Transcreve áudios de campo em português com ruído industrial — entrada natural para técnicos que já usam WhatsApp</td>
+            </tr>
+            <tr>
+              <td><strong>GPT-4o</strong></td>
+              <td>Estrutura transcrições em BOM e listas de comissionamento — reduz 6 dias para 2 sem retrabalho manual</td>
+            </tr>
+            <tr>
+              <td><strong>Isolation Forest</strong></td>
+              <td>Detecta anomalias em séries de sensores sem labels — ideal para os 64% de falsos alertas com dados históricos imperfeitos</td>
+            </tr>
+            <tr>
+              <td><strong>FastAPI</strong></td>
+              <td>API leve para integrar MQTT, PostgreSQL e dashboards — deploy rápido nas fases 1-3 sem lock-in</td>
+            </tr>
+            <tr>
+              <td><strong>React</strong></td>
+              <td>Dashboard responsivo para Marcos (KPIs financeiros), Roberto (milestones) e Cláudia (backlog de máquinas)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. ESTRATÉGIA -->
+  <section id="estrategia" class="bg-gray" aria-labelledby="estrategia-title">
+    <div class="container">
+      <h2 id="estrategia-title" class="reveal">Três stakeholders. Três argumentos. Uma decisão.</h2>
+      <p class="section-lead reveal">Cada decisor precisa ouvir uma narrativa diferente — todas apontam para o mesmo contrato de R$ 150.000 em 12 semanas.</p>
+
+      <div class="card-grid">
+        <article class="card reveal">
+          <span class="pill">CEO · 70% ações</span>
+          <h3>Marcos Tedesco</h3>
+          <blockquote class="quote-block">
+            Você está perdendo R$ 31.400 por mês em visitas falsas — não R$ 27.000. Em 6 semanas o contrato Anaclara de R$ 780.000 paga o projeto inteiro. ROI de 8,8x no primeiro ano.
+          </blockquote>
+        </article>
+        <article class="card reveal">
+          <span class="pill">CFO · 30% ações</span>
+          <h3>Roberto</h3>
+          <blockquote class="quote-block">
+            Contrato por fase, pagamento só na entrega. R$ 45k + R$ 55k + R$ 50k — se não entregar, não cobra. Isso vira ativo tangível na due diligence e multiplica valuation 2-3x.
+          </blockquote>
+        </article>
+        <article class="card reveal">
+          <span class="pill">Engenharia</span>
+          <h3>Cláudia Santarém</h3>
+          <blockquote class="quote-block">
+            A Fase 1 não usa IA preditiva — só thresholds dinâmicos com seus dados atuais. O backlog de 26 máquinas cai porque o comissionamento vai de 6 para 2 dias, não por promessa.
+          </blockquote>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. OBJEÇÕES -->
+  <section id="objecoes" class="bg-white" aria-labelledby="objecoes-title">
+    <div class="container">
+      <h2 id="objecoes-title" class="reveal">Perguntas que vão aparecer. Respostas que já temos.</h2>
+      <p class="section-lead reveal">Seis objeções mapeadas nas calls com a AltaCLP — com resposta consultiva pronta.</p>
+
+      <div class="accordion-list" id="accordion">
+        <div class="accordion-item reveal">
+          <button class="accordion-trigger" aria-expanded="false" aria-controls="acc-1">
+            <span>"É caro."</span>
+            <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div id="acc-1" class="accordion-panel" role="region">
+            <div class="accordion-panel-inner">
+              O investimento total é R$ 150.000 em 12 semanas. O payback é inferior a 6 semanas via contrato Anaclara de R$ 780.000 — antes mesmo de contar a economia recorrente de R$ 31.400/mês em visitas falsas. ROI de 8,8x no primeiro ano (R$ 1.320.000 de retorno). O projeto se paga sozinho na primeira conta fechada.
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item reveal">
+          <button class="accordion-trigger" aria-expanded="false" aria-controls="acc-2">
+            <span>"Já tentamos padronizar antes."</span>
+            <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div id="acc-2" class="accordion-panel" role="region">
+            <div class="accordion-panel-inner">
+              Esta solução não depende de disciplina humana. Thresholds dinâmicos, hash automático do CLP a cada 6h e BOM gerada por áudio criam uma rede de segurança automática. Mesmo quando o técnico pula etapa, o sistema detecta e alerta — diferente de checklist em planilha.
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item reveal">
+          <button class="accordion-trigger" aria-expanded="false" aria-controls="acc-3">
+            <span>"IA com dados ruins não funciona."</span>
+            <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div id="acc-3" class="accordion-panel" role="region">
+            <div class="accordion-panel-inner">
+              A Fase 1 (semanas 1-4) não usa IA preditiva. Implementamos thresholds dinâmicos primeiro — 30% de melhora imediata com os dados que vocês já têm. Isolation Forest só entra na Fase 3, quando há histórico suficiente. É exatamente o que a Cláudia precisa ouvir.
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item reveal">
+          <button class="accordion-trigger" aria-expanded="false" aria-controls="acc-4">
+            <span>"E se atrasar?"</span>
+            <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div id="acc-4" class="accordion-panel" role="region">
+            <div class="accordion-panel-inner">
+              Contrato por fase com pagamento na entrega: R$ 45.000 (sem 1-4), R$ 55.000 (sem 5-8), R$ 50.000 (sem 9-12). Se não entregar o escopo da fase, não cobra. Roberto tem visibilidade de milestone a milestone — zero surpresa no caixa.
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item reveal">
+          <button class="accordion-trigger" aria-expanded="false" aria-controls="acc-5">
+            <span>"Sérgio não vai liberar dados."</span>
+            <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div id="acc-5" class="accordion-panel" role="region">
+            <div class="accordion-panel-inner">
+              São apenas 3 tabelas de leitura no PostgreSQL existente, com 1 semana de trabalho conjunto com o Sérgio. Sem migração, sem acesso de escrita ao CLP. A Fase 1 começa com MQTT + dashboards — dados que o Gateway IoT já expõe.
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item reveal">
+          <button class="accordion-trigger" aria-expanded="false" aria-controls="acc-6">
+            <span>"Quem mantém quando o Júnior sair?"</span>
+            <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div id="acc-6" class="accordion-panel" role="region">
+            <div class="accordion-panel-inner">
+              Documentação automática gerada a cada deploy, retreinamento autônomo do modelo preditivo e 6 meses de suporte inclusos na Fase 3. O conhecimento fica na plataforma, não na cabeça de uma pessoa — crítico para valuation e continuidade operacional.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. INVESTIMENTO -->
+  <section id="investimento" class="bg-gray" aria-labelledby="investimento-title">
+    <div class="container">
+      <h2 id="investimento-title" class="reveal">Roadmap + Investimento</h2>
+      <p class="section-lead reveal">12 semanas de implementação, 4 versões de evolução — da correção imediata à plataforma como serviço.</p>
+
+      <div class="timeline-wrap reveal">
+        <div class="timeline" role="list" aria-label="Linha do tempo do projeto">
+          <div class="timeline-item" role="listitem">
+            <div class="timeline-dot"></div>
+            <h4>Fase 1 · Sem 1-4</h4>
+            <p>Thresholds + Cotação + MQTT/PostgreSQL + Dashboard básico</p>
+            <p class="timeline-price">R$ 45.000</p>
+          </div>
+          <div class="timeline-item" role="listitem">
+            <div class="timeline-dot"></div>
+            <h4>Fase 2 · Sem 5-8</h4>
+            <p>GitOps + App mobile + Dashboard completo</p>
+            <p class="timeline-price">R$ 55.000</p>
+          </div>
+          <div class="timeline-item" role="listitem">
+            <div class="timeline-dot"></div>
+            <h4>Fase 3 · Sem 9-12</h4>
+            <p>IA preditiva + retreinamento mensal + 6 meses suporte</p>
+            <p class="timeline-price">R$ 50.000</p>
+          </div>
+          <div class="timeline-item future" role="listitem">
+            <div class="timeline-dot"></div>
+            <h4>v2.0 · Meses 4-9</h4>
+            <p>IA preditiva em produção, app com assistente contextual, +8-10 NPS</p>
+          </div>
+          <div class="timeline-item future" role="listitem">
+            <div class="timeline-dot"></div>
+            <h4>v3.0 · Meses 10-18</h4>
+            <p>Plataforma como serviço — Anaclara, Belmare, Cubatão</p>
+          </div>
+          <div class="timeline-item future" role="listitem">
+            <div class="timeline-dot"></div>
+            <h4>v4.0 · Ano 2+</h4>
+            <p>Rede de conhecimento industrial — 50+ máquinas, efeito de rede</p>
+          </div>
+        </div>
+      </div>
+
+      <table class="phase-table reveal" aria-label="Escopo e valores por fase">
+        <thead>
+          <tr>
+            <th>Fase</th>
+            <th>Período</th>
+            <th>Escopo</th>
+            <th>Investimento</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Fase 1</strong></td>
+            <td>Semanas 1-4</td>
+            <td>Thresholds dinâmicos + Assistente de Cotação + MQTT/PostgreSQL + Dashboard básico</td>
+            <td class="price">R$ 45.000</td>
+          </tr>
+          <tr>
+            <td><strong>Fase 2</strong></td>
+            <td>Semanas 5-8</td>
+            <td>Auditoria GitOps de Campo + App mobile + Dashboard completo</td>
+            <td class="price">R$ 55.000</td>
+          </tr>
+          <tr>
+            <td><strong>Fase 3</strong></td>
+            <td>Semanas 9-12</td>
+            <td>IA preditiva (Isolation Forest) + retreinamento mensal + 6 meses de suporte</td>
+            <td class="price">R$ 50.000</td>
+          </tr>
+          <tr>
+            <td colspan="3"><strong>Total · 12 semanas</strong></td>
+            <td class="price">R$ 150.000</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="roi-card reveal">
+        <h3>Retorno sobre Investimento</h3>
+        <div class="roi-flow">
+          <div class="roi-box">
+            <div class="value" data-counter="150000" data-prefix="R$ " data-format="currency">R$ 0</div>
+            <div class="label">Investimento total</div>
+          </div>
+          <span class="roi-arrow" aria-hidden="true">→</span>
+          <div class="roi-box">
+            <div class="value" data-counter="1320000" data-prefix="R$ " data-format="currency">R$ 0</div>
+            <div class="label">Retorno no 1º ano</div>
+          </div>
+        </div>
+        <p class="roi-highlight"><span data-counter="8.8" data-suffix="x" data-decimals="1">0x</span> ROI</p>
+        <p class="roi-note">Payback em menos de 6 semanas · Contrato Anaclara Alimentos: R$ 780.000</p>
+      </div>
+
+      <h3 class="reveal" style="margin-bottom:24px">Cronograma de pagamento por milestone</h3>
+      <div class="payment-grid reveal">
+        <div class="payment-card">
+          <h4>Milestone 1 — Entrega Fase 1</h4>
+          <p class="caption">Semana 4 · Thresholds + Cotação + Infra + Dashboard básico</p>
+          <p class="amount">R$ 45.000</p>
+          <p class="caption">Pagamento na entrega validada</p>
+        </div>
+        <div class="payment-card">
+          <h4>Milestone 2 — Entrega Fase 2</h4>
+          <p class="caption">Semana 8 · GitOps + App mobile + Dashboard completo</p>
+          <p class="amount">R$ 55.000</p>
+          <p class="caption">Pagamento na entrega validada</p>
+        </div>
+        <div class="payment-card">
+          <h4>Milestone 3 — Entrega Fase 3</h4>
+          <p class="caption">Semana 12 · IA preditiva + retreinamento + 6 meses suporte</p>
+          <p class="amount">R$ 50.000</p>
+          <p class="caption">Pagamento na entrega validada</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. ASSISTENTE IA -->
+  <section id="assistente" class="bg-white" aria-labelledby="assistente-title">
+    <div class="container">
+      <h2 id="assistente-title" class="reveal">Pergunte sobre a proposta</h2>
+      <p class="section-lead reveal" style="margin-left:auto;margin-right:auto;text-align:center">Consultor HomoDeus com contexto completo — módulos, números, stakeholders e objeções.</p>
+
+      <div class="chat-container reveal">
+        <div class="chat-messages" id="chat-messages" role="log" aria-live="polite" aria-label="Conversa com assistente"></div>
+        <div class="chat-input-area">
+          <input type="text" id="chat-input" placeholder="Digite sua pergunta..." disabled aria-label="Mensagem para o assistente">
+          <button type="button" class="chat-send" id="chat-send" disabled aria-label="Enviar mensagem">Enviar</button>
+        </div>
+      </div>
+      <p class="chat-hint" id="chat-hint">Configure sua Anthropic API Key no topo da página para iniciar.</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container reveal">
+      <p><strong>Proposta preparada por HomoDeus</strong> · Versão 1.0 · Maio 2026</p>
+      <p class="caption">Dados baseados em análise das transcrições de call, planilhas internas e comunicações da AltaCLP Indústria S.A.</p>
+      <a href="#assistente" class="btn btn-primary btn-large" aria-label="Iniciar projeto com HomoDeus">Iniciar Projeto</a>
+    </div>
+  </footer>
+
+  <script>
+    // ─── System prompt (contexto completo) ───
+    const SYSTEM_PROMPT = `Você é o consultor sênior da HomoDeus que criou esta proposta para a AltaCLP Indústria S.A.
+Você conhece todos os detalhes da proposta:
+
+EMPRESAS: Cliente AltaCLP Indústria S.A. | Fornecedor HomoDeus | Data: 17 de maio de 2026
+
+STAKEHOLDERS:
+- Marcos Tedesco, CEO (70% ações): quer cortar R$ 31.400/mês de visitas falsas; teme projeto sem ROI
+- Roberto, CFO (30% ações): quer due diligence e valuation 2-3x maior; teme estouro de orçamento
+- Cláudia Santarém, Engenharia: quer resolver backlog de 26 máquinas; teme promessas com dados ruins
+
+REALIDADE VS PERCEPÇÃO (Marcos):
+- Falsos alertas: percepção 60%, realidade 64%
+- Custo visitas falsas: percepção R$ 27.000, realidade R$ 31.400/mês
+- Backlog comissionamento: percepção 22 máquinas, realidade 26
+- Tempo comissionamento: percepção 3-4 dias, realidade 6 dias
+- Incidentes drift código 2026: percepção 3, realidade 4
+- Prejuízo incidentes: percepção ~R$ 220k, realidade ~R$ 250k
+- R$ 780.000 em risco no contrato Anaclara Alimentos
+
+3 MÓDULOS:
+1. Assistente Comissionamento e Cotação: Whisper + GPT-4o, áudio WhatsApp → BOM, 6→2 dias
+2. Preditiva Híbrida: thresholds dinâmicos (30% imediato) + Isolation Forest (65% regime pleno)
+3. Auditoria GitOps Campo: agente Gateway IoT, hash CLP 6h OPC UA, alerta pré-deploy
+
+INVESTIMENTO:
+- Fase 1 (sem 1-4): R$ 45.000 — Thresholds + Cotação + MQTT/PostgreSQL + Dashboard básico
+- Fase 2 (sem 5-8): R$ 55.000 — GitOps + App mobile + Dashboard completo
+- Fase 3 (sem 9-12): R$ 50.000 — IA preditiva + retreinamento mensal + 6 meses suporte
+- TOTAL: R$ 150.000 / 12 semanas
+
+ROI: investimento R$ 150.000 | retorno 1º ano R$ 1.320.000 | ROI 8,8x | payback <6 semanas (Anaclara R$ 780k)
+
+ROADMAP: v2.0 meses 4-9 (IA produção, app, +8-10 NPS) | v3.0 meses 10-18 (PaaS Anaclara, Belmare, Cubatão) | v4.0 ano 2+ (50+ máquinas, rede)
+
+OBJEÇÕES:
+1. "É caro" → payback 6 semanas, ROI 8,8x
+2. "Já padronizamos antes" → rede automática, não depende de disciplina
+3. "IA com dados ruins" → Fase 1 sem IA, thresholds primeiro
+4. "E se atrasar?" → contrato por fase, paga na entrega
+5. "Sérgio não libera dados" → 1 semana conjunta, 3 tabelas leitura
+6. "Quem mantém sem o Júnior" → doc automática, retreinamento autônomo, 6 meses suporte
+
+Responda de forma direta, confiante e consultiva, como alguém que passou semanas analisando a operação da AltaCLP. Use dados específicos. Responda sempre em português brasileiro.`;
+
+    // ─── Particles canvas ───
+    (function initParticles() {
+      const canvas = document.getElementById('hero-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      let particles = [];
+      let w, h, animId;
+
+      function resize() {
+        w = canvas.width = canvas.offsetWidth;
+        h = canvas.height = canvas.offsetHeight;
+      }
+
+      function createParticles() {
+        particles = [];
+        const count = Math.min(60, Math.floor(w * h / 15000));
+        for (let i = 0; i < count; i++) {
+          particles.push({
+            x: Math.random() * w,
+            y: Math.random() * h,
+            r: Math.random() * 2 + 0.5,
+            vx: (Math.random() - 0.5) * 0.3,
+            vy: (Math.random() - 0.5) * 0.3,
+            opacity: Math.random() * 0.15 + 0.05
+          });
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, w, h);
+        particles.forEach(p => {
+          p.x += p.vx;
+          p.y += p.vy;
+          if (p.x < 0) p.x = w;
+          if (p.x > w) p.x = 0;
+          if (p.y < 0) p.y = h;
+          if (p.y > h) p.y = 0;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(0, 113, 227, ${p.opacity})`;
+          ctx.fill();
+        });
+        animId = requestAnimationFrame(draw);
+      }
+
+      resize();
+      createParticles();
+      draw();
+      window.addEventListener('resize', () => { resize(); createParticles(); });
+    })();
+
+    // ─── Reveal on scroll ───
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+    // Compare table row animation
+    const compareObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        document.querySelectorAll('#compare-rows tr').forEach((row, i) => {
+          setTimeout(() => row.classList.add('visible'), i * 100);
+        });
+        compareObserver.disconnect();
+      });
+    }, { threshold: 0.3 });
+    const compareTable = document.querySelector('.compare-table');
+    if (compareTable) compareObserver.observe(compareTable);
+
+    // Progress bar
+    const progressObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          document.getElementById('progress-fill').style.width = '65%';
+        }
+      });
+    }, { threshold: 0.5 });
+    const progressSection = document.querySelector('.progress-section');
+    if (progressSection) progressObserver.observe(progressSection);
+
+    // Counter animation
+    function formatCurrency(n) {
+      if (n >= 1000000) {
+        const m = (n / 1000000).toFixed(2).replace('.', ',');
+        return 'R$ ' + m + 'M';
+      }
+      return 'R$ ' + Math.round(n).toLocaleString('pt-BR');
+    }
+
+    function animateCounter(el) {
+      const target = parseFloat(el.dataset.counter);
+      const prefix = el.dataset.prefix || '';
+      const suffix = el.dataset.suffix || '';
+      const decimals = parseInt(el.dataset.decimals || '0', 10);
+      const format = el.dataset.format;
+      const duration = 1500;
+      const start = performance.now();
+
+      function tick(now) {
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = target * eased;
+        if (format === 'currency') {
+          el.textContent = formatCurrency(current);
+        } else {
+          el.textContent = prefix + current.toFixed(decimals).replace('.', ',') + suffix;
+        }
+        if (progress < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !entry.target.dataset.counted) {
+          entry.target.dataset.counted = '1';
+          animateCounter(entry.target);
+        }
+      });
+    }, { threshold: 0.5 });
+
+    document.querySelectorAll('[data-counter]').forEach(el => counterObserver.observe(el));
+
+    // Navbar active + scroll
+    const navbar = document.getElementById('navbar');
+    const sections = ['hero', 'problema', 'solucao', 'estrategia', 'objecoes', 'investimento', 'assistente'];
+    const navLinks = document.querySelectorAll('.nav-links a');
+
+    window.addEventListener('scroll', () => {
+      navbar.classList.toggle('scrolled', window.scrollY > 80);
+      let current = 'hero';
+      sections.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= 120) current = id;
+      });
+      navLinks.forEach(link => {
+        const sec = link.getAttribute('data-section');
+        link.classList.toggle('active', sec === current);
+      });
+    });
+
+    navLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const target = document.querySelector(link.getAttribute('href'));
+        if (target) target.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    // Accordion
+    document.querySelectorAll('.accordion-item').forEach(item => {
+      const trigger = item.querySelector('.accordion-trigger');
+      const panel = item.querySelector('.accordion-panel');
+      const inner = panel.querySelector('.accordion-panel-inner');
+
+      trigger.addEventListener('click', () => {
+        const isOpen = item.classList.contains('open');
+        document.querySelectorAll('.accordion-item').forEach(other => {
+          other.classList.remove('open');
+          other.querySelector('.accordion-trigger').setAttribute('aria-expanded', 'false');
+          other.querySelector('.accordion-panel').style.maxHeight = '0';
+        });
+        if (!isOpen) {
+          item.classList.add('open');
+          trigger.setAttribute('aria-expanded', 'true');
+          panel.style.maxHeight = inner.scrollHeight + 32 + 'px';
+        }
+      });
+    });
+
+    // ─── API Key ───
+    const apiKeyInput = document.getElementById('api-key');
+    const apiStatus = document.getElementById('api-status');
+    const chatInput = document.getElementById('chat-input');
+    const chatSend = document.getElementById('chat-send');
+    const chatHint = document.getElementById('chat-hint');
+    const chatMessages = document.getElementById('chat-messages');
+
+    let apiKey = '';
+    let conversationHistory = [];
+    let chatInitialized = false;
+
+    apiKeyInput.addEventListener('input', () => {
+      apiKey = apiKeyInput.value.trim();
+      const ready = apiKey.length > 10;
+      apiStatus.textContent = ready ? 'Chave configurada ✓' : 'Insira sua chave para usar o assistente';
+      apiStatus.classList.toggle('ready', ready);
+      chatInput.disabled = !ready;
+      chatSend.disabled = !ready;
+      chatHint.textContent = ready
+        ? 'Pressione Enter ou clique em Enviar.'
+        : 'Configure sua Anthropic API Key no topo da página para iniciar.';
+      if (ready && !chatInitialized) {
+        chatInitialized = true;
+        addMessage('assistant', 'Olá! Sou o consultor responsável por esta proposta. Posso responder qualquer dúvida sobre os módulos, os números, a estratégia de venda ou como abordar cada stakeholder. O que você quer saber?');
+      }
+    });
+
+    function formatTime() {
+      return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function addMessage(role, text) {
+      const wrap = document.createElement('div');
+      wrap.className = `chat-msg ${role === 'user' ? 'user' : 'assistant'}`;
+      const avatar = document.createElement('div');
+      avatar.className = `chat-avatar ${role === 'user' ? 'user' : 'bot'}`;
+      avatar.textContent = role === 'user' ? 'VC' : 'HD';
+      avatar.setAttribute('aria-hidden', 'true');
+      const bubbleWrap = document.createElement('div');
+      bubbleWrap.className = 'chat-bubble-wrap';
+      const bubble = document.createElement('div');
+      bubble.className = 'chat-bubble';
+      bubble.textContent = text;
+      const time = document.createElement('span');
+      time.className = 'chat-time';
+      time.textContent = formatTime();
+      bubbleWrap.appendChild(bubble);
+      bubbleWrap.appendChild(time);
+      wrap.appendChild(avatar);
+      wrap.appendChild(bubbleWrap);
+      chatMessages.appendChild(wrap);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return wrap;
+    }
+
+    function showLoading() {
+      const wrap = document.createElement('div');
+      wrap.className = 'chat-msg assistant chat-loading';
+      wrap.id = 'chat-loading';
+      wrap.innerHTML = `
+        <div class="chat-avatar bot" aria-hidden="true">HD</div>
+        <div class="chat-bubble-wrap">
+          <div class="chat-bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        </div>
+      `;
+      chatMessages.appendChild(wrap);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function hideLoading() {
+      const el = document.getElementById('chat-loading');
+      if (el) el.remove();
+    }
+
+    async function sendMessage(userMessage) {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          system: SYSTEM_PROMPT,
+          messages: conversationHistory
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || `Erro HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (!data.content || !data.content[0]?.text) {
+        throw new Error('Resposta inválida da API.');
+      }
+      return data.content[0].text;
+    }
+
+    async function handleSend() {
+      const text = chatInput.value.trim();
+      if (!text || !apiKey) return;
+
+      chatInput.value = '';
+      chatInput.disabled = true;
+      chatSend.disabled = true;
+
+      addMessage('user', text);
+      conversationHistory.push({ role: 'user', content: text });
+
+      showLoading();
+
+      try {
+        const reply = await sendMessage(text);
+        hideLoading();
+        addMessage('assistant', reply);
+        conversationHistory.push({ role: 'assistant', content: reply });
+      } catch (err) {
+        hideLoading();
+        addMessage('assistant', 'Desculpe, não consegui processar sua mensagem. Verifique sua API Key, conexão com a internet e se o acesso direto pelo navegador está habilitado na sua conta Anthropic. Detalhe: ' + (err.message || 'erro desconhecido'));
+        conversationHistory.pop();
+      }
+
+      chatInput.disabled = false;
+      chatSend.disabled = false;
+      chatInput.focus();
+    }
+
+    chatSend.addEventListener('click', handleSend);
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    });
+  </script>
+</body>
+</html>

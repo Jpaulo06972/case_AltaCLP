@@ -95,6 +95,7 @@ Ao abrir o Frontend, você será recebido por uma tela de login. Use as contas a
 | **Roberto CFO** | `roberto.cfo@altaclp.com.br` | **CFO** (Focado em Finanças, EBITDA e Valuation) |
 | **Cláudia Santarém** | `claudia.eng@altaclp.com.br` | **Engenharia** (Focada em Máquinas, Gestão de Código GitOps) |
 | **Anderson Vasconcellos** | `anderson.campo@altaclp.com.br` | **Técnico de Campo** (Focado em alertas, resolução de problemas no chão de fábrica) |
+| **João Vendas** | `joao.vendas@altaclp.com.br` | **Vendas** (Focado no Assistente de Cotação de IA e BOMs) |
 
 ---
 

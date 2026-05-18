@@ -1,20 +1,21 @@
 // AltaCLP Intelligence — App Router
 // Design: Industrial Precision (Brutalismo Industrial Refinado)
 
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
-import ErrorBoundary from "./components/ErrorBoundary";
-import { ThemeProvider } from "./contexts/ThemeContext";
-import Layout from "./components/Layout";
-import Home from "./pages/Home";
-import Alertas from "./pages/Alertas";
-import Comissionamento from "./pages/Comissionamento";
-import Codigo from "./pages/Codigo";
-import ROI from "./pages/ROI";
-import Cotacao from "./pages/Cotacao";
-import { toast } from "sonner";
+import Layout from "./Layout";
+import Home from "./Home";
+import Alertas from "./Alertas";
+import Comissionamento from "./Comissionamento";
+import Codigo from "./Codigo";
+import ROI from "./ROI";
+import Cotacao from "./Cotacao";
+
+const Toaster = (props: any) => null;
+const TooltipProvider = ({ children }: any) => <>{children}</>;
+const NotFound = () => <div>404 Não encontrado</div>;
+const ErrorBoundary = ({ children }: any) => <>{children}</>;
+const ThemeProvider = ({ children }: any) => <>{children}</>;
+const toast = { info: (msg: string) => console.log(msg) } as any;
 
 // Placeholder page for not-yet-implemented routes
 function PlaceholderPage({ title }: { title: string }) {

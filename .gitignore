@@ -1,0 +1,28 @@
+# Ambiente Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+
+# Banco de dados
+*.sqlite3
+*.db
+backend/altaclp_db.db
+
+# Frontend (Node / React)
+node_modules/
+dist/
+build/
+.npm/
+
+# IDE e Sistema
+.vscode/
+.idea/
+.DS_Store
+*.swp
+Thumbs.db
+.cursor/
+.agent/

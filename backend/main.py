@@ -3,17 +3,23 @@ AltaCLP Intelligence Platform — Entry Point (FastAPI)
 API principal da plataforma de inteligência operacional.
 """
 import asyncio
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import os
+import traceback
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
 from database.connection import init_db, SessionLocal
 from database.models import Cliente
 from services.simulator import TelemetriaSimulator
+from middleware.request_log import RouteLogMiddleware
+from services.notificacoes_ws import notification_hub
 
 
 @asynccontextmanager
@@ -61,14 +67,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RouteLogMiddleware)
+app.state.notification_hub = notification_hub
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    print(f"[UNHANDLED ERROR] {request.method} {request.url.path}: {exc}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": str(exc),
+            "stack": traceback.format_exc() if os.getenv("ENVIRONMENT") == "development" else None,
+        },
+    )
+
 
 # Registra routers
-from fastapi.staticfiles import StaticFiles
-
 from routers import (
     auth, dashboard, maquinas, alertas, gitops, comissionamento, cotacao, ia,
     engenharia_ia, equipment_library, equipamentos, tecnico,
-    projects, overview, app_state
+    projects, overview, app_state, quotations,
 )
 
 app.include_router(auth.router, prefix="/api/v1")
@@ -78,6 +98,7 @@ app.include_router(alertas.router, prefix="/api/v1")
 app.include_router(gitops.router, prefix="/api/v1")
 app.include_router(comissionamento.router, prefix="/api/v1")
 app.include_router(cotacao.router, prefix="/api/v1")
+app.include_router(quotations.router, prefix="/api/v1")
 app.include_router(ia.router, prefix="/api/v1")
 app.include_router(engenharia_ia.router, prefix="/api/v1")
 app.include_router(equipment_library.router, prefix="/api/v1")

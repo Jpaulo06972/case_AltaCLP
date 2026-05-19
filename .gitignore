@@ -22,6 +22,8 @@ npm-debug.log*
 
 # Database
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 
 # OS files

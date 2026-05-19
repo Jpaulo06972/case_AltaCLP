@@ -62,7 +62,13 @@ export default function TecnicoProjetoDrawer({ projetoId, onClose }: Props) {
     try {
       const r = await projectsApi.submitValidation(projetoId);
       qc.invalidateQueries({ queryKey: ["comissionamento-kanban"] });
-      addToast(r.data.message || "Submetido para validação", "success");
+      qc.invalidateQueries({ queryKey: ["app-state"] });
+      addToast(
+        r.data.new_status
+          ? `Projeto submetido (${r.data.new_status})`
+          : "Submetido para validação",
+        "success"
+      );
       onClose();
     } catch {
       addToast("Erro na submissão", "error");

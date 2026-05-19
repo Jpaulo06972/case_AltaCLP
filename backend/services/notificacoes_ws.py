@@ -68,5 +68,23 @@ class NotificationHub:
     async with self._lock:
       await self._broadcast(self._engenheiros, payload)
 
+  async def notificar_novo_projeto(self, project: dict):
+    payload = {
+      "evento": "project:new",
+      "project": project,
+      "mensagem": f"Novo projeto: {project.get('nome_contrato', project.get('id'))}",
+    }
+    async with self._lock:
+      await self._broadcast(self._engenheiros, payload)
+
+  async def notificar_status_projeto(self, id_projeto: str, new_status: str):
+    payload = {
+      "evento": "project:status_changed",
+      "id_projeto": id_projeto,
+      "new_status": new_status,
+    }
+    async with self._lock:
+      await self._broadcast(self._engenheiros, payload)
+
 
 notification_hub = NotificationHub()

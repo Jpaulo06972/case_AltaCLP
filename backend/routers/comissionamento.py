@@ -28,8 +28,10 @@ router = APIRouter(prefix="/comissionamentos", tags=["Comissionamento"])
 
 def _filtrar_projetos_acesso(query, db: Session, usuario: Usuario):
     if usuario.perfil == PerfilUsuario.vendedor:
-        # Vendedores só veem projetos que eles criaram (id_vendedor na tabela projetos)
-        return query.join(Projeto, Maquina.id_projeto == Projeto.id).filter(Projeto.id_vendedor == usuario.id)
+        # Vendedores só veem projetos que eles criaram (id_vendedor armazenado como string UUID)
+        return query.join(Projeto, Maquina.id_projeto == Projeto.id).filter(
+            Projeto.id_vendedor == str(usuario.id)
+        )
     if not is_tecnico(usuario):
         # Engenharia, CEO e CFO veem todos os projetos (nenhum filtro aplicado)
         return query

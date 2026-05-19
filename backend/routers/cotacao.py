@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from database.connection import get_db
-from database.models import Cotacao, Cliente, StatusCotacao, PerfilUsuario, Projeto, Maquina, Comissionamento, StatusComissionamento, FaseProjeto, ModeloCLP, ProtocoloCLP
+from database.models import (
+    Cotacao, CotacaoDraft, Cliente, StatusCotacao, PerfilUsuario,
+    Usuario,
+)
+from services.project_factory import create_project_from_quotation
+from services.notificacoes_ws import notification_hub
 from schemas.schemas import CotacaoProcessarRequest
 from services.bom_generator import gerar_bom_da_transcricao
 from middleware.rbac import require_roles
@@ -27,7 +32,13 @@ _cotacao_roles = require_roles(
 )
 
 
-async def _salvar_e_retornar_cotacao(transcricao: str, vendedor: str, cliente_nome: str, db: Session):
+async def _salvar_e_retornar_cotacao(
+    transcricao: str,
+    vendedor: str,
+    cliente_nome: str,
+    db: Session,
+    usuario: Usuario = None,
+):
     cliente = None
     if cliente_nome:
         cliente = db.query(Cliente).filter(
@@ -51,6 +62,7 @@ async def _salvar_e_retornar_cotacao(transcricao: str, vendedor: str, cliente_no
         id=uuid.uuid4(),
         cliente_id=cliente.id if cliente else None,
         vendedor_nome=vendedor,
+        id_vendedor=usuario.id if usuario else None,
         audio_transcricao=transcricao,
         audio_duracao_segundos=duracao_estimada,
         parametros_extraidos=resultado.get("parametros_extraidos"),
@@ -86,10 +98,13 @@ async def _salvar_e_retornar_cotacao(transcricao: str, vendedor: str, cliente_no
 async def processar_cotacao(
     body: CotacaoProcessarRequest,
     db: Session = Depends(get_db),
-    _user=Depends(_cotacao_roles),
+    usuario: Usuario = Depends(_cotacao_roles),
 ):
     """Processa texto digitado ou transcrição mockada diretamente."""
-    return await _salvar_e_retornar_cotacao(body.transcricao_audio, body.vendedor, body.cliente_nome, db)
+    print(f"[ROUTE HIT] POST /cotacao/processar — body: {body.model_dump()}")
+    return await _salvar_e_retornar_cotacao(
+        body.transcricao_audio, body.vendedor, body.cliente_nome, db, usuario
+    )
 
 
 @router.post("/processar-audio")
@@ -98,7 +113,7 @@ async def processar_audio(
     vendedor: str = Form(...),
     cliente_nome: str = Form(None),
     db: Session = Depends(get_db),
-    _user=Depends(_cotacao_roles),
+    usuario: Usuario = Depends(_cotacao_roles),
 ):
     """
     Recebe um arquivo de áudio, transcreve usando Groq Whisper (whisper-large-v3) 
@@ -131,91 +146,80 @@ async def processar_audio(
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
-        return await _salvar_e_retornar_cotacao(transcricao, vendedor, cliente_nome, db)
+        return await _salvar_e_retornar_cotacao(transcricao, vendedor, cliente_nome, db, usuario)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao transcrever áudio: {str(e)}")
 
 
 @router.post("/{cotacao_id}/aprovar")
-def aprovar_cotacao(
+async def aprovar_cotacao(
     cotacao_id: str,
     db: Session = Depends(get_db),
-    _user=Depends(_cotacao_roles),
+    usuario: Usuario = Depends(_cotacao_roles),
 ):
     """Aprova a cotação e cria o projeto de comissionamento e máquina associada."""
+    print(f"[ROUTE HIT] POST /cotacao/{cotacao_id}/aprovar")
+
     try:
         c_uuid = uuid.UUID(cotacao_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="ID de cotação inválido")
-        
+
     cotacao = db.query(Cotacao).filter(Cotacao.id == c_uuid).first()
     if not cotacao:
         raise HTTPException(status_code=404, detail="Cotação não encontrada")
-    
+
+    if cotacao.id_vendedor and cotacao.id_vendedor != usuario.id:
+        perfil = usuario.perfil.value if hasattr(usuario.perfil, "value") else str(usuario.perfil)
+        if perfil != PerfilUsuario.ceo.value:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
     if cotacao.status == StatusCotacao.aprovada:
         raise HTTPException(status_code=400, detail="Cotação já foi aprovada")
-        
-    cliente_id = cotacao.cliente_id
-    if not cliente_id:
-        # Create a dummy client
-        novo_cliente = Cliente(
-            id=uuid.uuid4(),
-            nome=cotacao.cliente_nome if hasattr(cotacao, 'cliente_nome') and cotacao.cliente_nome else "Cliente IA",
-            setor="alimentos",
-            cidade="indefinida",
-            estado="SP"
-        )
-        db.add(novo_cliente)
+
+    cliente_nome = "Cliente IA"
+    if cotacao.cliente_id:
+        cli = db.query(Cliente).filter(Cliente.id == cotacao.cliente_id).first()
+        if cli:
+            cliente_nome = cli.nome
+
+    try:
+        cotacao.status = StatusCotacao.aprovada
+        cotacao.data_aprovacao = datetime.utcnow()
         db.flush()
-        cliente_id = novo_cliente.id
-        
-    # Generate unique codes
-    proj_id = f"PROJ-{str(uuid.uuid4())[:6].upper()}"
-    maq_codigo = f"CLP-{str(uuid.uuid4())[:4].upper()}"
-    
-    projeto = Projeto(
-        id=proj_id,
-        nome_contrato=f"Automação {cotacao.vendedor_nome or 'IA'} - {proj_id}",
-        id_vendedor="VND-01",
-        id_engenheiro="ENG-01",
-        valor_contrato=cotacao.valor_estimado,
-        status="AGUARDANDO_ENGENHARIA",
-    )
-    db.add(projeto)
-    db.flush()
-    
-    maquina = Maquina(
-        id=uuid.uuid4(),
-        id_projeto=proj_id,
-        codigo=maq_codigo,
-        nome=f"Linha {proj_id}",
-        modelo_clp=ModeloCLP.siemens_s7,
-        protocolo=ProtocoloCLP.modbus_tcp,
-        status="offline",
-        cliente_id=cliente_id
-    )
-    db.add(maquina)
-    db.flush()
-    
-    comiss = Comissionamento(
-        id=uuid.uuid4(),
-        maquina_id=maquina.id,
-        cliente_id=cliente_id,
-        status=StatusComissionamento.aguardando_dados,
-        fase_projeto=FaseProjeto.awaiting_engineering,
-        engenheiro_responsavel="ENG-01",
-        valor_contrato=cotacao.valor_estimado,
-        checklist_json=cotacao.template_comissionamento,
-        bom_json=cotacao.bom_gerada,
-        resumo_cotacao={"transcricao": cotacao.audio_transcricao}
-    )
-    db.add(comiss)
-    
-    cotacao.status = StatusCotacao.aprovada
-    cotacao.data_aprovacao = datetime.utcnow()
-    
-    db.commit()
-    return {"message": "Cotação aprovada e projeto criado", "projeto_id": proj_id}
+
+        project = create_project_from_quotation(
+            db,
+            usuario,
+            cliente_nome=cliente_nome,
+            valor_estimado=float(cotacao.valor_estimado or 0),
+            texto_transcrito=cotacao.audio_transcricao or "",
+            json_proposta_ia=cotacao.parametros_extraidos,
+            bom_json=cotacao.bom_gerada,
+            template_comissionamento=cotacao.template_comissionamento,
+        )
+        db.commit()
+
+        saved = db.query(Cotacao).filter(Cotacao.id == c_uuid).first()
+        if not saved or saved.status != StatusCotacao.aprovada:
+            raise RuntimeError("Cotação approve failed — status not persisted")
+
+        print(f"[DB WRITE CONFIRMED] projetos id: {project['id']}")
+        await notification_hub.notificar_novo_projeto(project)
+
+        return {
+            "message": "Cotação aprovada e projeto criado",
+            "projeto_id": project["id"],
+            "project": project,
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] POST /cotacao/{cotacao_id}/aprovar: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("")

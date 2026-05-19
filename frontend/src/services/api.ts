@@ -125,6 +125,19 @@ export const cotacaoApi = {
   aprovar: (id: string) => api.post(`/cotacao/${id}/aprovar`),
 };
 
+// Quotations (draft + approve — persistência em cotacoes_draft / projetos)
+export const quotationsApi = {
+  saveDraft: (data: {
+    texto_transcrito?: string;
+    json_proposta_ia?: Record<string, unknown>;
+    cliente_nome?: string;
+    valor_estimado?: number;
+    audio_raw_url?: string;
+  }) => api.post("/quotations/draft", data),
+  approve: (id: string, data?: { prazo?: string }) =>
+    api.post(`/quotations/${id}/approve`, data ?? {}),
+};
+
 // IA
 export const iaApi = {
   analisarPlanta: () => api.post("/ia/analisar-planta"),

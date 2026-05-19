@@ -13,9 +13,10 @@ from pydantic import BaseModel
 from database.connection import get_db
 from database.models import (
     Projeto, Maquina, Alerta, GitOpsAuditoria,
-    Usuario, ProjetoPendencia, PerfilUsuario
+    Usuario, ProjetoPendencia, PerfilUsuario,
 )
 from routers.auth import get_usuario_atual
+from routers.projects import _projects_query
 
 router = APIRouter(prefix="/app-state", tags=["AppState"])
 
@@ -26,7 +27,7 @@ def get_app_state(db: Session = Depends(get_db), usuario: Usuario = Depends(get_
     Returns a full denormalized snapshot of projects + machines + alerts
     for AppDataContext hydration on app load.
     """
-    projetos = db.query(Projeto).all()
+    projetos = _projects_query(db, usuario).all()
     proj_list = []
     for p in projetos:
         total_tasks = db.query(ProjetoPendencia).filter(ProjetoPendencia.id_projeto == p.id).count()

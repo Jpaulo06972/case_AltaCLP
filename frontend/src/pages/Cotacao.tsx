@@ -4,10 +4,12 @@
  */
 
 import { useState, useCallback } from "react";
-import { cotacaoApi } from "@/services/api";
+import { cotacaoApi, quotationsApi } from "@/services/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/Toast";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAppData } from "@/contexts/AppDataContext";
 import {
   Zap,
   Mic,
@@ -35,6 +37,8 @@ export default function Cotacao() {
   const qc = useQueryClient();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { refresh: refreshAppData } = useAppData();
 
   const [step, setStep] = useState<"upload" | "processing" | "done">("upload");
   const [result, setResult] = useState<any>(null);
@@ -71,72 +75,100 @@ export default function Cotacao() {
   const handleProcess = async () => {
     setLoading(true);
     setStep("processing");
+    const vendedorNome = user?.nome || "Vendedor";
+    const clienteNome = "Cerâmica Branco";
+    const transcricao = manualText.trim() || mockTranscription;
 
     try {
       let res;
       if (file) {
         const formData = new FormData();
         formData.append("audio", file);
-        formData.append("vendedor", "João Vendedor");
-        formData.append("cliente_nome", "Cerâmica Branco");
+        formData.append("vendedor", vendedorNome);
+        formData.append("cliente_nome", clienteNome);
+        console.log("[1] FRONTEND: processar áudio — POST /api/cotacao/processar-audio");
         res = await cotacaoApi.processarAudio(formData);
       } else {
+        console.log("[2] FRONTEND: POST /api/cotacao/processar", { transcricao_audio: transcricao.slice(0, 80) });
         res = await cotacaoApi.processar({
-          transcricao_audio: manualText.trim() ? manualText : mockTranscription,
-          vendedor: "João Vendedor",
-          cliente_nome: "Cerâmica Branco",
+          transcricao_audio: transcricao,
+          vendedor: vendedorNome,
+          cliente_nome: clienteNome,
         });
       }
-      setResult(res.data);
-    } catch (err) {
-      console.error(err);
-      // Fallback BOM for demo
-      setResult({
-        bom: [
-          { codigo: "CLP-S71500", descricao: "CLP Siemens S7-1500 (CPU 1515-2 PN) IP65", quantidade: 3, unidade: "un", valor_unit: 9200 },
-          { codigo: "SM-1231-AI", descricao: "Módulo E/S Analógico SM 1231", quantidade: 6, unidade: "un", valor_unit: 1200 },
-          { codigo: "GW-OPCUA", descricao: "Gateway OPC UA / OPC DA", quantidade: 1, unidade: "un", valor_unit: 4500 },
-          { codigo: "SNS-PT100", descricao: "Sensor Temperatura PT100", quantidade: 9, unidade: "un", valor_unit: 380 },
-          { codigo: "TRS-400B", descricao: "Transdutor de Pressão (0-400 bar)", quantidade: 6, unidade: "un", valor_unit: 520 },
-          { codigo: "ENG-COM", descricao: "Engenharia de Aplicação & Comissionamento", quantidade: 12, unidade: "dias", valor_unit: 1800 },
-        ],
-        tempo_processamento_segundos: 4.8,
+
+      const data = res.data;
+      setResult(data);
+
+      const valorTotal = (data.bom || []).reduce(
+        (sum: number, item: any) => sum + (item.quantidade || 0) * (item.valor_unit || 0),
+        0
+      );
+
+      console.log("[2b] FRONTEND: POST /api/quotations/draft");
+      const draftRes = await quotationsApi.saveDraft({
+        texto_transcrito: data.transcricao_gerada || transcricao,
+        json_proposta_ia: {
+          cliente_nome: clienteNome,
+          valor_estimado: valorTotal,
+          bom: data.bom,
+          parametros: data.parametros_extraidos,
+        },
+        cliente_nome: clienteNome,
+        valor_estimado: valorTotal,
       });
-      setProposalText(`[Escopo Técnico Gerado pela IA]
+      const draftId = draftRes.data.id_cotacao;
+      setResult((prev: any) => ({ ...prev, cotacao_id: data.cotacao_id, draft_id: draftId }));
+      console.log("[5] FRONTEND: Draft saved, id_cotacao:", draftId);
 
-1. Hardware Equipamentos:
-- 3x CLP Siemens S7-1500 (CPU 1515-2 PN) IP65
-- 6x Módulo E/S Analógico SM 1231
-- 9x Sensor Temperatura PT100
-- 6x Transdutor de Pressão (0-400 bar)
-
-2. Painel de Automação:
-- Painel Rittal IP65 com ventilação forçada adequado para ambiente ceramico
-
-3. Sistema Embarcado / SCADA:
-- Gateway OPC UA para integração com supervisório Wonderware legado
-- Engenharia de Aplicação & Comissionamento (12 dias)`);
-    } finally {
+      if (data.template_comissionamento || data.bom) {
+        setProposalText(
+          proposalText ||
+            `[Escopo Técnico — ${clienteNome}]\n\n` +
+              (data.bom || [])
+                .map((i: any) => `- ${i.quantidade}x ${i.descricao}`)
+                .join("\n")
+        );
+      }
       setStep("done");
+    } catch (err: any) {
+      console.error("[FRONTEND ERROR] processar cotação:", err);
+      addToast(err?.response?.data?.detail || err?.response?.data?.error || "Falha ao processar cotação.", "error");
+      setStep("upload");
+    } finally {
       setLoading(false);
     }
   };
 
   const handleAprovar = async () => {
-    if (!result?.cotacao_id) {
+    const approveId = result?.draft_id || result?.cotacao_id;
+    if (!approveId) {
       addToast("Cotação inválida ou não possui ID.", "error");
       return;
     }
     try {
       setLoading(true);
-      const res = await cotacaoApi.aprovar(result.cotacao_id);
+      console.log('[1] FRONTEND: "Aprovar e Enviar" button clicked');
+      console.log("[6] FRONTEND: POST /api/quotations/" + approveId + "/approve");
+
+      let projetoId: string;
+      if (result?.draft_id) {
+        const res = await quotationsApi.approve(approveId);
+        projetoId = res.data.id || res.data.id_projeto;
+      } else {
+        const res = await cotacaoApi.aprovar(approveId);
+        projetoId = res.data.projeto_id;
+      }
+
+      console.log("[8] FRONTEND: projeto criado:", projetoId);
+      await refreshAppData();
       qc.invalidateQueries({ queryKey: ["comissionamento-kanban"] });
+      qc.invalidateQueries({ queryKey: ["app-state"] });
       addToast("Cotação aprovada! Projeto criado.", "success");
-      
-      // Navigate to Comissionamento Kanban
-      navigate(`/comissionamento?projeto=${res.data.projeto_id}&open=true`);
+      navigate(`/comissionamento?projeto=${projetoId}&open=true`);
     } catch (err: any) {
-      addToast(err?.response?.data?.detail || "Erro ao aprovar cotação.", "error");
+      console.error("[FRONTEND ERROR] aprovar:", err);
+      addToast(err?.response?.data?.detail || err?.response?.data?.error || "Erro ao aprovar cotação.", "error");
     } finally {
       setLoading(false);
     }

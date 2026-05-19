@@ -69,10 +69,7 @@ def init_db():
     Cria todas as tabelas definidas nos modelos ORM.
     Chamado no startup da aplicação.
     """
-    from database.models import (
-        Cliente, Maquina, LeituraSensor, Alerta,
-        Incidente, GitOpsAuditoria, Comissionamento,
-        Cotacao, Usuario, KPIHistorico
-    )
+    import database.models  # noqa: F401 — registra todos os modelos no metadata
+
     Base.metadata.create_all(bind=engine)
     print("[DB] Tabelas criadas/verificadas com sucesso.")

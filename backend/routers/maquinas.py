@@ -12,9 +12,11 @@ from sqlalchemy import func, desc
 
 from database.connection import get_db
 from database.models import (
-    Maquina, Cliente, LeituraSensor, Alerta,
-    StatusMaquina, StatusAlerta
+    Maquina, Cliente, LeituraSensor, Alerta, Usuario,
+    StatusMaquina, StatusAlerta, LogThreshold,
 )
+from routers.auth import get_usuario_atual
+from services.tecnico_scope import filtrar_maquinas_query, assert_maquina_acesso
 from schemas.schemas import (
     MaquinaResponse, MaquinaDetalheResponse, LeituraSensorResponse,
     AlertaResponse, ThresholdUpdateRequest, ThresholdUpdateResponse,
@@ -64,10 +66,12 @@ def listar_maquinas(
     codigo_sync: bool = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
 ):
     """Lista máquinas com filtros e paginação."""
     query = db.query(Maquina, Cliente.nome).join(Cliente, Maquina.cliente_id == Cliente.id)
+    query = filtrar_maquinas_query(query, db, usuario)
 
     if status:
         query = query.filter(Maquina.status == status)
@@ -133,7 +137,12 @@ def estatisticas_resumo(db: Session = Depends(get_db)):
 
 
 @router.get("/{maquina_id}")
-def detalhe_maquina(maquina_id: UUID, db: Session = Depends(get_db)):
+def detalhe_maquina(
+    maquina_id: UUID,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    assert_maquina_acesso(db, usuario, maquina_id)
     """Máquina completa + últimas 24h de telemetria + alertas recentes."""
     result = db.query(Maquina, Cliente.nome).join(
         Cliente, Maquina.cliente_id == Cliente.id
@@ -277,7 +286,8 @@ def alertas_maquina(
 def atualizar_thresholds(
     maquina_id: UUID,
     body: ThresholdUpdateRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     """Atualiza thresholds da máquina + previsão de redução de falsos alertas."""
     maquina = db.query(Maquina).filter(Maquina.id == maquina_id).first()
@@ -307,6 +317,18 @@ def atualizar_thresholds(
 
     # Calcula redução estimada
     reducao = ThresholdEngine.projetar_reducao_falsos(db, maquina_id, {**anteriores, **novos})
+
+    for param, novo_val in novos.items():
+        ant = anteriores.get(param)
+        if ant is not None and ant != novo_val:
+            db.add(LogThreshold(
+                maquina_id=maquina_id,
+                parametro_alterado=param,
+                valor_antigo=ant,
+                valor_novo=novo_val,
+                id_usuario=str(usuario.id),
+                origem="manual",
+            ))
 
     try:
         db.commit()

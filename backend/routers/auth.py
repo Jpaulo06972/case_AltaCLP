@@ -91,13 +91,18 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     except Exception:
         db.rollback()
 
-    token = criar_token({"sub": usuario.email, "perfil": usuario.perfil.value})
+    token = criar_token({
+        "sub": usuario.email,
+        "perfil": usuario.perfil.value,
+        "uid": str(usuario.id),
+    })
 
     return LoginResponse(
         access_token=token,
         perfil=usuario.perfil.value,
         nome=usuario.nome,
-        expires_in=TOKEN_EXPIRE_HOURS * 3600
+        user_id=str(usuario.id),
+        expires_in=TOKEN_EXPIRE_HOURS * 3600,
     )
 
 

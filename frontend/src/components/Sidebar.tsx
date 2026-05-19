@@ -20,12 +20,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
 
 const navigation = [
-  { label: "Visão Geral", path: "/", icon: LayoutDashboard, roles: ["ceo", "cfo", "engenharia"] },
-  { label: "Máquinas", path: "/maquinas", icon: Cpu, roles: ["engenharia", "tecnico_campo"] },
-  { label: "Alertas", path: "/alertas", icon: Bell, roles: ["engenharia", "tecnico_campo"] },
-  { label: "Auditoria GitOps", path: "/gitops", icon: GitCompareArrows, roles: ["engenharia"] },
-  { label: "Comissionamento", path: "/comissionamento", icon: Wrench, roles: ["ceo", "cfo", "engenharia", "tecnico_campo"] },
-  { label: "Cotação IA", path: "/cotacao", icon: Zap, roles: ["engenharia", "vendas"] },
+  { label: "Visão Geral", path: "/", icon: LayoutDashboard, roles: ["ceo", "cfo"] },
+  { label: "Engenharia", path: "/engenharia", icon: LayoutDashboard, roles: ["engenharia", "ceo", "cfo"] },
+  { label: "Máquinas", path: "/maquinas", icon: Cpu, roles: ["engenharia", "tecnico_campo", "ceo", "cfo"] },
+  { label: "Alertas", path: "/alertas", icon: Bell, roles: ["engenharia", "tecnico_campo", "ceo", "cfo"] },
+  { label: "Auditoria GitOps", path: "/gitops", icon: GitCompareArrows, roles: ["engenharia", "ceo", "cfo"] },
+  { label: "Comissionamento", path: "/comissionamento", icon: Wrench, roles: ["ceo", "cfo", "engenharia", "tecnico_campo", "vendedor", "vendas"] },
+  { label: "Biblioteca", path: "/biblioteca", icon: Cpu, roles: ["engenharia", "ceo", "cfo"] },
+  { label: "Cotação IA", path: "/cotacao", icon: Zap, roles: ["vendas", "vendedor", "ceo", "cfo"] },
   { label: "ROI & Economia", path: "/roi", icon: TrendingUp, roles: ["ceo", "cfo"] },
 ];
 
@@ -39,6 +41,8 @@ export default function Sidebar() {
     cfo: "CFO",
     engenharia: "Engenharia",
     tecnico_campo: "Técnico de Campo",
+    vendas: "Vendas",
+    vendedor: "Vendas",
   };
 
   return (

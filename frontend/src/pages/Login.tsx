@@ -23,8 +23,13 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(email, senha);
-      navigate("/", { replace: true });
+      const userData = await login(email, senha);
+      const home =
+        userData.perfil === "engenharia" ? "/engenharia" :
+        userData.perfil === "tecnico_campo" ? "/maquinas" :
+        userData.perfil === "vendedor" || userData.perfil === "vendas" ? "/cotacao" :
+        "/";
+      navigate(home, { replace: true });
     } catch (err: any) {
       setError(
         err.response?.data?.mensagem ||
@@ -127,6 +132,7 @@ export default function Login() {
               { email: "roberto.cfo@altaclp.com.br", label: "CFO" },
               { email: "claudia.eng@altaclp.com.br", label: "Engenharia" },
               { email: "anderson.campo@altaclp.com.br", label: "Campo" },
+              { email: "joao.vendas@altaclp.com.br", label: "Vendedor" },
             ].map((demo) => (
               <button
                 key={demo.email}

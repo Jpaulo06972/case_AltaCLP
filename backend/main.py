@@ -63,7 +63,13 @@ app.add_middleware(
 )
 
 # Registra routers
-from routers import auth, dashboard, maquinas, alertas, gitops, comissionamento, cotacao, ia
+from fastapi.staticfiles import StaticFiles
+
+from routers import (
+    auth, dashboard, maquinas, alertas, gitops, comissionamento, cotacao, ia,
+    engenharia_ia, equipment_library, equipamentos, tecnico,
+    projects, overview, app_state
+)
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
@@ -73,6 +79,17 @@ app.include_router(gitops.router, prefix="/api/v1")
 app.include_router(comissionamento.router, prefix="/api/v1")
 app.include_router(cotacao.router, prefix="/api/v1")
 app.include_router(ia.router, prefix="/api/v1")
+app.include_router(engenharia_ia.router, prefix="/api/v1")
+app.include_router(equipment_library.router, prefix="/api/v1")
+app.include_router(equipamentos.router, prefix="/api/v1")
+app.include_router(tecnico.router, prefix="/api/v1")
+app.include_router(projects.router, prefix="/api/v1")
+app.include_router(overview.router, prefix="/api/v1")
+app.include_router(app_state.router, prefix="/api/v1")
+
+_uploads = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(_uploads, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_uploads), name="uploads")
 
 
 @app.get("/")

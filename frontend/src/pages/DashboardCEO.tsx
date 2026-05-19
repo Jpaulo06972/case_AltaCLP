@@ -5,6 +5,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi, iaApi } from "@/services/api";
+import AIChatWidget from "@/components/AIChatWidget";
 import {
   TrendingDown,
   TrendingUp,
@@ -118,11 +119,20 @@ export default function DashboardCEO() {
       setAiInsight(res.data.resumo_executivo || JSON.stringify(res.data));
     } catch {
       setAiInsight(
-        "Análise indisponível no momento. Verifique se a chave da API Anthropic está configurada no backend."
+        "Análise indisponível no momento. Verifique se a chave da API Groq está configurada no backend."
       );
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const handleChatSend = async (message: string, history: any[]) => {
+    const res = await iaApi.chat({
+      mensagem: message,
+      historico: history,
+      perfil: "ceo",
+    });
+    return res.data.resposta;
   };
 
   if (isLoading) {
@@ -288,50 +298,22 @@ export default function DashboardCEO() {
 
       {/* ━━ AI Insight + Alertas Críticos ━━ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* AI Insight */}
-        <div className="lg:col-span-2 apple-card p-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-apple-purple/5 to-transparent rounded-bl-full" />
-          <div className="relative">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-lg ai-gradient flex items-center justify-center">
-                <Sparkles size={16} className="text-white" />
-              </div>
-              <div>
-                <h3 className="text-[15px] font-semibold text-apple-label">
-                  Inteligência Operacional
-                </h3>
-                <p className="text-[12px] text-apple-tertiary">
-                  Análise em tempo real com IA
-                </p>
-              </div>
-            </div>
-
-            {aiInsight ? (
-              <p className="text-[14px] text-apple-secondary leading-relaxed whitespace-pre-line">
-                {aiInsight}
-              </p>
-            ) : (
-              <div>
-                <p className="text-[13px] text-apple-tertiary mb-4 leading-relaxed">
-                  A IA pode analisar o estado completo da operação em tempo real,
-                  identificar riscos críticos e recomendar ações prioritárias
-                  com estimativas de impacto financeiro.
-                </p>
-                <button
-                  onClick={loadAiInsight}
-                  disabled={aiLoading}
-                  className="apple-btn apple-btn-secondary text-[13px]"
-                >
-                  {aiLoading ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Sparkles size={16} />
-                  )}
-                  {aiLoading ? "Analisando..." : "Gerar Análise Completa"}
-                </button>
-              </div>
-            )}
-          </div>
+        {/* AI Insight Chat */}
+        <div className="lg:col-span-2">
+          <AIChatWidget
+            title="Assistente Executivo de IA"
+            initialSummary={aiInsight || "Olá. Sou seu Assistente Executivo. Tenho acesso completo a projetos, finanças, equipes e OEE. Selecione um prompt abaixo ou digite sua pergunta."}
+            onSend={handleChatSend}
+            placeholder="Pergunte sobre OPEX, CAPEX, TCO ou impacto financeiro..."
+            className="h-full min-h-[420px]"
+            suggestions={[
+              "Qual projeto tem o maior custo de manutenção este mês?",
+              "Resuma os alarmes críticos de hoje e seu impacto financeiro.",
+              "Mostre a eficiência da equipe de campo vs orçamento projetado para o trimestre.",
+              "Qual é o OEE atual em toda a frota de máquinas?",
+              "Quais projetos estão acima do orçamento e em quanto?"
+            ]}
+          />
         </div>
 
         {/* Alertas Críticos */}

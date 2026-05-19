@@ -3,6 +3,7 @@
  * Apple HomeKit master-detail view
  */
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { maquinasApi } from "@/services/api";
 import { useNavigate } from "react-router-dom";
@@ -27,11 +28,29 @@ const statusConfig: Record<string, { label: string; color: string; dot: string }
   em_comissionamento: { label: "Comissionando", color: "text-apple-blue", dot: "bg-apple-blue" },
 };
 
+const PLC_LABELS: Record<string, string> = {
+  siemens_s7: "Siemens S7",
+  allen_bradley: "Allen-Bradley",
+  schneider: "Schneider",
+  weg: "WEG",
+  weintek: "Weintek",
+};
+
+const STATUS_FILTER = [
+  { value: "", label: "Todos os status" },
+  { value: "operando", label: "Operando" },
+  { value: "alerta", label: "Alerta" },
+  { value: "crítico", label: "Parado / Crítico" },
+  { value: "offline", label: "Offline" },
+  { value: "em_comissionamento", label: "Manutenção" },
+];
+
 export default function Maquinas() {
   const navigate = useNavigate();
+  const [statusFilter, setStatusFilter] = useState("");
   const { data, isLoading } = useQuery({
-    queryKey: ["maquinas"],
-    queryFn: () => maquinasApi.list().then((r) => r.data),
+    queryKey: ["maquinas", statusFilter],
+    queryFn: () => maquinasApi.list(statusFilter ? { status: statusFilter } : {}).then((r) => r.data),
   });
 
   if (isLoading) {
@@ -46,6 +65,18 @@ export default function Maquinas() {
 
   return (
     <div className="space-y-4 max-w-[1400px]">
+      <div className="apple-card p-4 flex items-center gap-4">
+        <label className="text-[12px] font-medium text-apple-tertiary">Filtrar status</label>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-2 rounded-lg bg-apple-surface-1 text-[13px] min-w-[200px]"
+        >
+          {STATUS_FILTER.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
       {/* Stats */}
       <div className="apple-card p-4 flex items-center justify-between">
         <div className="flex items-center gap-6">
@@ -106,6 +137,11 @@ export default function Maquinas() {
                 <p className="text-[12px] text-apple-tertiary truncate">
                   {m.nome || m.setor_planta || "—"}
                 </p>
+                {m.modelo_clp && (
+                  <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-apple-blue/10 text-apple-blue">
+                    {PLC_LABELS[m.modelo_clp] || m.modelo_clp}
+                  </span>
+                )}
               </div>
 
               <div className="text-right flex-shrink-0">

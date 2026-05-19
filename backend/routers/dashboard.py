@@ -284,6 +284,37 @@ def dashboard_engenharia(db: Session = Depends(get_db)):
         "timestamp": a.timestamp_criacao.isoformat() if a.timestamp_criacao else None,
     } for a, codigo in alertas_rec]
 
+    operando = db.query(Maquina).filter(Maquina.status == StatusMaquina.operando).count()
+    criticas = db.query(Maquina).filter(Maquina.status == StatusMaquina.critico).count()
+
+    info_cards = [
+        {
+            "id": "status_planta",
+            "titulo": "Status Geral da Planta",
+            "valor": f"{operando} operando / {criticas} críticas",
+            "severidade": "critico" if criticas > 2 else "aviso" if alertas_ativos > 20 else "ok",
+            "detalhe": f"{len(maquinas_all)} CLPs monitorados em tempo real",
+        },
+        {
+            "id": "gargalo_dia",
+            "titulo": "Gargalo Crítico do Dia",
+            "valor": backlog_list[0]["cliente_nome"] if backlog_list else "Nenhum",
+            "severidade": "critico" if backlog_list and backlog_list[0].get("risco_cancelamento") else "aviso",
+            "detalhe": (
+                f"Comissionamento {backlog_list[0]['maquina_codigo']} — {backlog_list[0]['dias_atraso']}d atraso"
+                if backlog_list
+                else "Operação dentro do SLA"
+            ),
+        },
+        {
+            "id": "drift_gitops",
+            "titulo": "CLPs com Drift de Código",
+            "valor": str(maquinas_drift),
+            "severidade": "critico" if maquinas_drift > 0 else "ok",
+            "detalhe": "Revisar auditoria GitOps antes do próximo turno",
+        },
+    ]
+
     return {
         "kpis": {
             "backlog_total": backlog_total,
@@ -292,6 +323,7 @@ def dashboard_engenharia(db: Session = Depends(get_db)):
             "alertas_ativos": alertas_ativos,
             "maquinas_drift": maquinas_drift,
         },
+        "info_cards": info_cards,
         "maquinas_status_grid": maquinas_grid,
         "backlog_priorizado": backlog_list,
         "alertas_recentes": alertas_list,

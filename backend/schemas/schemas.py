@@ -67,6 +67,7 @@ class PerfilUsuarioEnum(str, enum.Enum):
     cfo = "cfo"
     engenharia = "engenharia"
     tecnico_campo = "tecnico_campo"
+    vendedor = "vendedor"
 
 
 # ============================================
@@ -82,6 +83,7 @@ class LoginResponse(BaseModel):
     access_token: str
     perfil: str
     nome: str
+    user_id: Optional[str] = None
     expires_in: int = 28800  # 8 horas em segundos
 
 

@@ -49,6 +49,7 @@ class ModeloCLP(str, enum.Enum):
     siemens_s7 = "siemens_s7"
     schneider = "schneider"
     weg = "weg"
+    weintek = "weintek"
 
 
 class ProtocoloCLP(str, enum.Enum):
@@ -162,11 +163,76 @@ class PerfilUsuario(str, enum.Enum):
     cfo = "cfo"
     engenharia = "engenharia"
     tecnico_campo = "tecnico_campo"
+    vendedor = "vendedor"
+
+
+class FaseProjeto(str, enum.Enum):
+    awaiting_engineering = "AWAITING_ENGINEERING"
+    vendor_quote = "VENDOR_QUOTE"
+    in_execution = "IN_EXECUTION"
+    post_sale = "POST_SALE"
+
+
+class TipoEquipamento(str, enum.Enum):
+    sensor = "sensor"
+    motor = "motor"
+    inversor = "inversor"
+
+
+class AcaoAuditoriaGit(str, enum.Enum):
+    pull = "Pull"
+    pr = "PR"
+    commit = "Commit"
+    reject = "Reject"
+
+
+class CategoriaEquipamento(str, enum.Enum):
+    plc = "PLC"
+    sensor = "Sensor"
+    inversor = "Inverter"
+    motor = "Motor"
+
+
+class TipoAcaoTecnico(str, enum.Enum):
+    visita_campo = "visita_campo"
+    acesso_remoto = "acesso_remoto"
+    falso_alarme = "falso_alarme"
+
+
+class StatusRevisaoEng(str, enum.Enum):
+    pendente = "pendente"
+    aprovado = "aprovado"
+    rejeitado = "rejeitado"
+
+
+class StatusTarefaPendencia(str, enum.Enum):
+    pendente = "pendente"
+    em_revisao = "em_revisao"
+    concluida = "concluida"
 
 
 # ============================================
 # MODELOS ORM
 # ============================================
+
+class Projeto(Base):
+    __tablename__ = "projetos"
+
+    id = Column(String(50), primary_key=True)
+    nome_contrato = Column(String(300), nullable=False)
+    id_vendedor = Column(String(100), nullable=True)
+    id_engenheiro = Column(String(100), nullable=True)
+    valor_contrato = Column(Numeric(12, 2), nullable=True)
+    status = Column(String(50), nullable=False)
+    prazo = Column(Date, nullable=True)
+    dias_atraso = Column(Integer, default=0)
+    risco = Column(String(50), nullable=True)
+
+    # Relacionamentos
+    maquinas = relationship("Maquina", back_populates="projeto", lazy="dynamic")
+    alertas = relationship("Alerta", back_populates="projeto", lazy="dynamic")
+    auditorias_git = relationship("LogAuditoriaGit", back_populates="projeto", lazy="dynamic")
+    pendencias = relationship("ProjetoPendencia", back_populates="projeto_ref", lazy="dynamic")
 
 class Cliente(Base):
     __tablename__ = "clientes"
@@ -231,9 +297,11 @@ class Maquina(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     observacoes = Column(Text, nullable=True)
+    id_projeto = Column(String(50), ForeignKey("projetos.id"), nullable=True)
 
     # Relacionamentos
     cliente = relationship("Cliente", back_populates="maquinas")
+    projeto = relationship("Projeto", back_populates="maquinas")
     leituras = relationship("LeituraSensor", back_populates="maquina", lazy="dynamic")
     alertas = relationship("Alerta", back_populates="maquina", lazy="dynamic")
     incidentes = relationship("Incidente", back_populates="maquina", lazy="dynamic")
@@ -297,10 +365,15 @@ class Alerta(Base):
     resolucao_descricao = Column(Text, nullable=True)
     is_falso_alerta = Column(Boolean, nullable=True)
     origem = Column(SAEnum(OrigemAlerta, name="origem_alerta_enum", create_constraint=False), default=OrigemAlerta.threshold)
+    id_projeto = Column(String(50), ForeignKey("projetos.id"), nullable=True)
+    status_acao = Column(String(50), default="AGUARDANDO_TECNICO")
+    texto_analise_ia = Column(Text, nullable=True)
+    impacto_financeiro_estimado = Column(Numeric(12, 2), nullable=True)
 
     # Relacionamentos
     maquina = relationship("Maquina", back_populates="alertas")
     cliente = relationship("Cliente", back_populates="alertas")
+    projeto = relationship("Projeto", back_populates="alertas")
 
     def __repr__(self):
         return f"<Alerta {self.codigo_alerta} - {self.tipo.value}>"
@@ -351,9 +424,11 @@ class GitOpsAuditoria(Base):
     pr_url = Column(String(500), nullable=True)
     acao_tomada = Column(SAEnum(AcaoGitOps, name="acao_gitops_enum", create_constraint=False), default=AcaoGitOps.nenhuma)
     aprovado_por = Column(String(200), nullable=True)
+    id_projeto = Column(String(50), ForeignKey("projetos.id"), nullable=True)
 
     # Relacionamentos
     maquina = relationship("Maquina", back_populates="auditorias_gitops")
+    projeto = relationship("Projeto", backref="gitops_auditorias")
 
     def __repr__(self):
         return f"<GitOpsAuditoria {self.maquina_id} - sync={self.em_sync}>"
@@ -381,10 +456,22 @@ class Comissionamento(Base):
     checklist_json = Column(JSON, nullable=True)
     bom_json = Column(JSON, nullable=True)
     template_comissionamento_url = Column(String(500), nullable=True)
+    fase_projeto = Column(
+        SAEnum(FaseProjeto, name="fase_projeto_enum", create_constraint=False),
+        nullable=True,
+        default=FaseProjeto.awaiting_engineering,
+    )
+    especificacoes_tecnicas = Column(JSON, nullable=True)
+    resumo_cotacao = Column(JSON, nullable=True)
+    documentos_projeto = Column(JSON, nullable=True)
+    id_vendedor = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True, index=True)
+    escopo_tecnico_detalhado = Column(JSON, nullable=True)
 
     # Relacionamentos
     maquina = relationship("Maquina", back_populates="comissionamentos")
     cliente = relationship("Cliente", back_populates="comissionamentos")
+    pendencias = relationship("ProjetoPendencia", back_populates="comissionamento", lazy="dynamic")
+    historico = relationship("ProjetoHistorico", back_populates="comissionamento", lazy="dynamic")
 
     def __repr__(self):
         return f"<Comissionamento {self.maquina_id} - {self.status.value}>"
@@ -407,12 +494,24 @@ class Cotacao(Base):
     valor_estimado = Column(Numeric(12, 2), nullable=True)
     data_criacao = Column(DateTime, default=datetime.utcnow)
     data_aprovacao = Column(DateTime, nullable=True)
+    id_vendedor = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True, index=True)
 
     # Relacionamentos
     cliente = relationship("Cliente", back_populates="cotacoes")
 
     def __repr__(self):
         return f"<Cotacao {self.vendedor_nome} - {self.status.value}>"
+
+
+class CotacaoDraft(Base):
+    __tablename__ = "cotacoes_draft"
+
+    id_cotacao = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_vendedor = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False, index=True)
+    audio_raw_url = Column(String(1000), nullable=True)
+    texto_transcrito = Column(Text, nullable=True)
+    json_proposta_ia = Column(JSON, nullable=True)
+    status = Column(String(50), default="draft")
 
 
 class Usuario(Base):
@@ -447,3 +546,212 @@ class KPIHistorico(Base):
 
     def __repr__(self):
         return f"<KPI {self.data}>"
+
+
+class VisitaTecnica(Base):
+    __tablename__ = "visitas_tecnicas"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cliente_id = Column(UUID(as_uuid=True), ForeignKey("clientes.id"), nullable=False, index=True)
+    maquina_id = Column(UUID(as_uuid=True), ForeignKey("maquinas.id"), nullable=True, index=True)
+    alerta_id = Column(UUID(as_uuid=True), ForeignKey("alertas.id"), nullable=True)
+    tecnico_nome = Column(String(200), nullable=False)
+    custo = Column(Numeric(10, 2), nullable=False, default=0)
+    motivo = Column(Text, nullable=True)
+    foi_falso_alerta = Column(Boolean, default=False)
+    data_visita = Column(DateTime, nullable=False, index=True)
+    data_criacao = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (Index("ix_visitas_data", "data_visita"),)
+
+
+class CustoOperacional(Base):
+    __tablename__ = "custos_operacionais"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cliente_id = Column(UUID(as_uuid=True), ForeignKey("clientes.id"), nullable=True, index=True)
+    categoria = Column(String(100), nullable=False)
+    descricao = Column(Text, nullable=True)
+    valor = Column(Numeric(12, 2), nullable=False)
+    data_referencia = Column(DateTime, nullable=False, index=True)
+    data_criacao = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (Index("ix_custos_data", "data_referencia"),)
+
+
+class EquipamentoPlanta(Base):
+    __tablename__ = "equipamentos_planta"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    maquina_id = Column(UUID(as_uuid=True), ForeignKey("maquinas.id"), nullable=False, index=True)
+    tag = Column(String(50), nullable=False)
+    nome = Column(String(200), nullable=False)
+    tipo = Column(SAEnum(TipoEquipamento, name="tipo_equipamento_enum", create_constraint=False), nullable=False)
+    unidade = Column(String(20), nullable=True)
+    valor_atual = Column(Float, nullable=True)
+    threshold_min = Column(Float, nullable=True)
+    threshold_max = Column(Float, nullable=True)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("equipamentos_planta.id"), nullable=True)
+    ativo = Column(Boolean, default=True)
+    ultima_atualizacao = Column(DateTime, default=datetime.utcnow)
+
+    maquina = relationship("Maquina", backref="equipamentos")
+
+
+class LogThreshold(Base):
+    __tablename__ = "log_thresholds"
+
+    id_registro = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_equipamento = Column(UUID(as_uuid=True), ForeignKey("equipamentos_planta.id"), nullable=True)
+    maquina_id = Column(UUID(as_uuid=True), ForeignKey("maquinas.id"), nullable=True)
+    parametro_alterado = Column(String(100), nullable=False)
+    valor_antigo = Column(Float, nullable=True)
+    valor_novo = Column(Float, nullable=False)
+    id_usuario = Column(String(200), nullable=False)
+    origem = Column(String(20), default="manual")
+    data_hora = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class AnaliseAlarme(Base):
+    __tablename__ = "analise_alarmes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    alerta_id = Column(UUID(as_uuid=True), ForeignKey("alertas.id"), unique=True, nullable=False, index=True)
+    texto_analise = Column(Text, nullable=False)
+    sugestao_acao = Column(Text, nullable=True)
+    gerado_em = Column(DateTime, default=datetime.utcnow)
+    modelo_ia = Column(String(50), default="heuristic")
+
+
+class AgendamentoManutencao(Base):
+    __tablename__ = "agendamentos_manutencao"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    alerta_id = Column(UUID(as_uuid=True), ForeignKey("alertas.id"), nullable=False, index=True)
+    id_tecnico = Column(String(200), nullable=False)
+    id_cliente = Column(UUID(as_uuid=True), ForeignKey("clientes.id"), nullable=False)
+    data_agendada = Column(DateTime, nullable=False)
+    diretiva_manual = Column(Text, nullable=True)
+    aprovado_ia = Column(Boolean, default=False)
+    notificacao_enviada = Column(Boolean, default=False)
+    status = Column(String(30), default="agendado")
+    criado_em = Column(DateTime, default=datetime.utcnow)
+
+
+class LogAuditoriaGit(Base):
+    __tablename__ = "log_auditoria_git"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_projeto = Column(String(50), ForeignKey("projetos.id"), nullable=True, index=True)
+    acao = Column(SAEnum(AcaoAuditoriaGit, name="acao_auditoria_git_enum", create_constraint=False), nullable=False)
+    id_usuario = Column(String(200), nullable=False)
+    diff_resumo = Column(Text, nullable=True)
+    risco_ia = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    projeto = relationship("Projeto", back_populates="auditorias_git")
+
+
+class ProjetoTecnico(Base):
+    __tablename__ = "projeto_tecnicos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_projeto = Column(UUID(as_uuid=True), ForeignKey("comissionamentos.id"), nullable=False, index=True)
+    id_tecnico = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False, index=True)
+    data_atribuicao = Column(DateTime, default=datetime.utcnow)
+    ativo = Column(Boolean, default=True)
+
+    __table_args__ = (
+        Index("ix_projeto_tecnicos_par", "id_projeto", "id_tecnico"),
+    )
+
+
+class ProjetoPendencia(Base):
+    __tablename__ = "projeto_pendencias"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    comissionamento_id = Column(UUID(as_uuid=True), ForeignKey("comissionamentos.id"), nullable=True, index=True)
+    id_projeto = Column(String(50), ForeignKey("projetos.id"), nullable=True, index=True)
+    id_tecnico_atribuido = Column(String(100), nullable=True)
+    titulo = Column(String(300), nullable=False)
+    descricao = Column(Text, nullable=True)
+    ordem = Column(Integer, default=0)
+    concluida = Column(Boolean, default=False)
+    status_tarefa = Column(
+        SAEnum(StatusTarefaPendencia, name="status_tarefa_enum", create_constraint=False),
+        default=StatusTarefaPendencia.pendente,
+    )
+    fase = Column(String(50), nullable=True)
+    data_conclusao = Column(DateTime, nullable=True)
+
+    comissionamento = relationship("Comissionamento", back_populates="pendencias")
+    projeto_ref = relationship("Projeto", back_populates="pendencias")
+    documentos = relationship("DocumentoComissionamento", back_populates="pendencia", lazy="dynamic")
+    documentos = relationship("DocumentoComissionamento", back_populates="pendencia", lazy="dynamic")
+
+
+class ProjetoHistorico(Base):
+    __tablename__ = "projeto_historico"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    comissionamento_id = Column(UUID(as_uuid=True), ForeignKey("comissionamentos.id"), nullable=False, index=True)
+    acao_realizada = Column(String(500), nullable=False)
+    id_usuario = Column(String(200), nullable=False)
+    data_hora = Column(DateTime, default=datetime.utcnow, index=True)
+
+    comissionamento = relationship("Comissionamento", back_populates="historico")
+
+
+class IntervencaoTecnica(Base):
+    __tablename__ = "intervencoes_tecnicas"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_alarme = Column(UUID(as_uuid=True), ForeignKey("alertas.id"), nullable=False, index=True)
+    id_tecnico = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False, index=True)
+    tipo_acao = Column(
+        SAEnum(TipoAcaoTecnico, name="tipo_acao_tecnico_enum", create_constraint=False),
+        nullable=False,
+    )
+    comentario_tecnico = Column(Text, nullable=False)
+    data_hora = Column(DateTime, default=datetime.utcnow, index=True)
+    status_revisao_eng = Column(
+        SAEnum(StatusRevisaoEng, name="status_revisao_eng_enum", create_constraint=False),
+        default=StatusRevisaoEng.pendente,
+    )
+
+
+class DocumentoComissionamento(Base):
+    __tablename__ = "documentos_comissionamento"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_projeto = Column(String(50), ForeignKey("projetos.id"), nullable=True, index=True)
+    id_pendencia = Column(UUID(as_uuid=True), ForeignKey("projeto_pendencias.id"), nullable=True)
+    id_tecnico = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    nome_arquivo = Column(String(300), nullable=False)
+    url_documento = Column(String(1000), nullable=False)
+    tipo_mime = Column(String(100), nullable=True)
+    data_upload = Column(DateTime, default=datetime.utcnow, index=True)
+
+    pendencia = relationship("ProjetoPendencia", back_populates="documentos")
+
+
+class SubmissaoValidacao(Base):
+    __tablename__ = "submissoes_validacao"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_projeto = Column(UUID(as_uuid=True), ForeignKey("comissionamentos.id"), nullable=False, index=True)
+    id_tecnico = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    resumo_ia = Column(Text, nullable=True)
+    status = Column(String(30), default="aguardando_engenharia")
+    data_submissao = Column(DateTime, default=datetime.utcnow)
+
+
+class PortfolioEquipamento(Base):
+    __tablename__ = "portfolio_equipamentos"
+
+    id_equipamento = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nome_equipamento = Column(String(300), nullable=False)
+    fabricante = Column(String(100), nullable=False)
+    categoria = Column(String(50), nullable=False, index=True)
+    url_manual = Column(String(1000), nullable=False)
+    data_cadastro = Column(DateTime, default=datetime.utcnow)
+    cadastrado_por = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)

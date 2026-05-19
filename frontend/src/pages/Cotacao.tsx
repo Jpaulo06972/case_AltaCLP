@@ -5,6 +5,9 @@
 
 import { useState, useCallback } from "react";
 import { cotacaoApi } from "@/services/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/components/Toast";
+import { useNavigate } from "react-router-dom";
 import {
   Zap,
   Mic,
@@ -29,11 +32,17 @@ const mockChecklist = [
 ];
 
 export default function Cotacao() {
+  const qc = useQueryClient();
+  const { addToast } = useToast();
+  const navigate = useNavigate();
+
   const [step, setStep] = useState<"upload" | "processing" | "done">("upload");
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [manualText, setManualText] = useState("");
+  const [proposalText, setProposalText] = useState("");
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -64,12 +73,20 @@ export default function Cotacao() {
     setStep("processing");
 
     try {
-      // Simulate API call using our mock transcription
-      const res = await cotacaoApi.processar({
-        transcricao_audio: mockTranscription,
-        vendedor: "João Vendedor",
-        cliente_nome: "Cerâmica Branco",
-      });
+      let res;
+      if (file) {
+        const formData = new FormData();
+        formData.append("audio", file);
+        formData.append("vendedor", "João Vendedor");
+        formData.append("cliente_nome", "Cerâmica Branco");
+        res = await cotacaoApi.processarAudio(formData);
+      } else {
+        res = await cotacaoApi.processar({
+          transcricao_audio: manualText.trim() ? manualText : mockTranscription,
+          vendedor: "João Vendedor",
+          cliente_nome: "Cerâmica Branco",
+        });
+      }
       setResult(res.data);
     } catch (err) {
       console.error(err);
@@ -85,8 +102,42 @@ export default function Cotacao() {
         ],
         tempo_processamento_segundos: 4.8,
       });
+      setProposalText(`[Escopo Técnico Gerado pela IA]
+
+1. Hardware Equipamentos:
+- 3x CLP Siemens S7-1500 (CPU 1515-2 PN) IP65
+- 6x Módulo E/S Analógico SM 1231
+- 9x Sensor Temperatura PT100
+- 6x Transdutor de Pressão (0-400 bar)
+
+2. Painel de Automação:
+- Painel Rittal IP65 com ventilação forçada adequado para ambiente ceramico
+
+3. Sistema Embarcado / SCADA:
+- Gateway OPC UA para integração com supervisório Wonderware legado
+- Engenharia de Aplicação & Comissionamento (12 dias)`);
     } finally {
       setStep("done");
+      setLoading(false);
+    }
+  };
+
+  const handleAprovar = async () => {
+    if (!result?.cotacao_id) {
+      addToast("Cotação inválida ou não possui ID.", "error");
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await cotacaoApi.aprovar(result.cotacao_id);
+      qc.invalidateQueries({ queryKey: ["comissionamento-kanban"] });
+      addToast("Cotação aprovada! Projeto criado.", "success");
+      
+      // Navigate to Comissionamento Kanban
+      navigate(`/comissionamento?projeto=${res.data.projeto_id}&open=true`);
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || "Erro ao aprovar cotação.", "error");
+    } finally {
       setLoading(false);
     }
   };
@@ -124,11 +175,34 @@ export default function Cotacao() {
                     <p className="text-[14px] font-semibold text-apple-label mb-1">Arraste um áudio do WhatsApp</p>
                     <p className="text-[12px] text-apple-tertiary mb-6">ou clique para selecionar (MP3, OGG, WAV)</p>
                     
-                    <label className="apple-btn apple-btn-secondary cursor-pointer">
+                    <label className="apple-btn apple-btn-secondary cursor-pointer w-full justify-center">
                       <Mic size={16} />
-                      Selecionar Arquivo
+                      Selecionar Arquivo de Áudio
                       <input type="file" accept="audio/*" className="hidden" onChange={handleFileSelect} />
                     </label>
+
+                    <div className="flex items-center w-full my-6">
+                      <div className="flex-1 h-px bg-apple-separator/30"></div>
+                      <span className="px-4 text-[12px] text-apple-tertiary uppercase font-semibold">ou digite</span>
+                      <div className="flex-1 h-px bg-apple-separator/30"></div>
+                    </div>
+
+                    <textarea
+                      className="w-full bg-apple-surface-0 border border-apple-separator/50 rounded-xl p-4 text-[13px] text-apple-label placeholder:text-apple-tertiary focus:outline-none focus:ring-2 focus:ring-apple-blue resize-none"
+                      rows={4}
+                      placeholder="Descreva a visita e as necessidades do cliente..."
+                      value={manualText}
+                      onChange={(e) => setManualText(e.target.value)}
+                    ></textarea>
+
+                    <button
+                      onClick={handleProcess}
+                      disabled={!manualText.trim()}
+                      className="apple-btn apple-btn-primary w-full mt-4 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Sparkles size={16} />
+                      Gerar Proposta com IA
+                    </button>
                   </>
                 ) : (
                   <div className="w-full">
@@ -202,7 +276,7 @@ export default function Cotacao() {
                     Transcrição Automática
                   </h4>
                   <p className="text-[13px] text-apple-secondary leading-relaxed italic">
-                    {mockTranscription}
+                    {result?.transcricao_gerada || mockTranscription}
                   </p>
                 </div>
                 
@@ -221,75 +295,32 @@ export default function Cotacao() {
         <div className="space-y-4">
           {step === "done" ? (
             <>
-              {/* Bloco 1: BOM */}
               <div className="apple-card overflow-hidden animate-scale-in" style={{ animationDelay: "0.1s" }}>
                 <div className="px-6 py-4 border-b border-apple-separator/50 flex items-center gap-2 bg-apple-surface-0">
                   <FileText size={18} className="text-apple-blue" />
                   <h3 className="text-[15px] font-semibold text-apple-label">
-                    Bill of Materials (BOM)
-                  </h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[13px]">
-                    <thead>
-                      <tr className="border-b border-apple-separator/30 bg-apple-surface-1/30">
-                        {["Item", "Qtd", "Un.", "Total"].map((h) => (
-                          <th key={h} className="px-4 py-2 text-left text-[11px] font-semibold text-apple-tertiary uppercase">
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bom.map((item: any, i: number) => (
-                        <tr key={i} className="border-b border-apple-separator/20 hover:bg-apple-surface-1/50 transition-colors">
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-apple-label line-clamp-1">{item.descricao}</p>
-                            <p className="text-[11px] text-apple-tertiary font-mono">{item.codigo}</p>
-                          </td>
-                          <td className="px-4 py-3 font-semibold text-apple-blue">{item.quantidade}</td>
-                          <td className="px-4 py-3 text-apple-tertiary">{item.unidade}</td>
-                          <td className="px-4 py-3 font-medium text-apple-label">
-                            R$ {((item.quantidade || 0) * (item.valor_unit || 0)).toLocaleString("pt-BR")}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t border-apple-separator/50 bg-apple-surface-0">
-                        <td colSpan={3} className="px-4 py-3 text-right text-[12px] font-semibold text-apple-tertiary">
-                          Total Estimado:
-                        </td>
-                        <td className="px-4 py-3 text-[14px] font-bold text-apple-green">
-                          R$ {totalBOM.toLocaleString("pt-BR")}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-
-              {/* Bloco 2: Template de Comissionamento */}
-              <div className="apple-card overflow-hidden animate-scale-in" style={{ animationDelay: "0.2s" }}>
-                <div className="px-6 py-4 border-b border-apple-separator/50 flex items-center gap-2 bg-apple-surface-0">
-                  <ClipboardList size={18} className="text-apple-purple" />
-                  <h3 className="text-[15px] font-semibold text-apple-label">
-                    Template de Comissionamento (Gerado via IA)
+                    Escopo Técnico (Revisão)
                   </h3>
                 </div>
                 <div className="p-4 bg-apple-surface-1/20">
-                  <div className="space-y-2">
-                    {mockChecklist.map((task) => (
-                      <div key={task.id} className="flex items-start gap-3 p-3 bg-apple-surface-0 rounded-lg border border-apple-separator/30">
-                        <div className="w-5 h-5 rounded-full border-2 border-apple-separator flex items-center justify-center flex-shrink-0 mt-0.5"></div>
-                        <p className="text-[13px] font-medium text-apple-secondary leading-snug">{task.text}</p>
-                      </div>
-                    ))}
-                  </div>
+                  <textarea
+                    className="w-full bg-apple-surface-0 border border-apple-separator/50 rounded-xl p-4 text-[13px] text-apple-label placeholder:text-apple-tertiary focus:outline-none focus:ring-2 focus:ring-apple-blue font-mono"
+                    rows={12}
+                    value={proposalText}
+                    onChange={(e) => setProposalText(e.target.value)}
+                  ></textarea>
                   
-                  <div className="mt-5 flex justify-end">
-                    <button className="apple-btn apple-btn-primary text-[13px] py-2">
-                      Salvar Projeto e Aprovar
+                  <div className="mt-5 flex justify-end gap-3">
+                    <button className="apple-btn apple-btn-secondary text-[13px] py-2">
+                      Refazer / Ajustar
+                    </button>
+                    <button 
+                      className="apple-btn apple-btn-primary text-[13px] py-2 disabled:opacity-50"
+                      onClick={handleAprovar}
+                      disabled={loading}
+                    >
+                      {loading ? <Loader2 size={14} className="animate-spin" /> : null}
+                      Aprovar e Enviar para Engenharia
                       <ArrowRight size={14} />
                     </button>
                   </div>

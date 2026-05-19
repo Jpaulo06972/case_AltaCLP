@@ -19,9 +19,10 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   }
 
   if (allowedRoles && user && !allowedRoles.includes(user.perfil)) {
-    // Redirect to the default route for their role if they try to access forbidden route
     if (user.perfil === "tecnico_campo") return <Navigate to="/maquinas" replace />;
-    if (user.perfil === "vendas") return <Navigate to="/cotacao" replace />;
+    if (user.perfil === "vendas" || user.perfil === "vendedor") return <Navigate to="/cotacao" replace />;
+    if (user.perfil === "engenharia") return <Navigate to="/engenharia" replace />;
+    if (user.perfil === "cfo") return <Navigate to="/" replace />;
     return <Navigate to="/" replace />;
   }
 

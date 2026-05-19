@@ -6,6 +6,6 @@ pydantic-settings
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
-anthropic
+groq
 python-dotenv
 httpx

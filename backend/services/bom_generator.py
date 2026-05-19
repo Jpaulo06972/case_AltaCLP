@@ -1,7 +1,7 @@
 """
 AltaCLP Intelligence Platform — Gerador de BOM (Bill of Materials)
 Extrai parâmetros técnicos de transcrições de áudio e gera BOM + template.
-Usa Anthropic API quando disponível, fallback para extração heurística.
+Usa Groq API quando disponível, fallback para extração heurística.
 """
 
 import os
@@ -40,10 +40,11 @@ async def gerar_bom_da_transcricao(transcricao: str, vendedor: str, cliente_nome
     """
     inicio = time.time()
 
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    from services.groq_client import get_groq_client
+    client = get_groq_client()
 
-    if api_key and api_key.startswith("sk-ant-"):
-        resultado = await _gerar_com_ia(transcricao, vendedor, cliente_nome, api_key)
+    if client:
+        resultado = await _gerar_com_ia(transcricao, vendedor, cliente_nome, client)
     else:
         resultado = _gerar_heuristico(transcricao, vendedor, cliente_nome)
 
@@ -51,14 +52,12 @@ async def gerar_bom_da_transcricao(transcricao: str, vendedor: str, cliente_nome
     return resultado
 
 
-async def _gerar_com_ia(transcricao: str, vendedor: str, cliente_nome: str, api_key: str) -> dict:
+async def _gerar_com_ia(transcricao: str, vendedor: str, cliente_nome: str, client) -> dict:
     """
-    Usa Anthropic API para extrair parâmetros e gerar BOM inteligente.
+    Usa Groq API para extrair parâmetros e gerar BOM inteligente.
     """
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=api_key)
+        from services.groq_client import DEFAULT_TEXT_MODEL
 
         system_prompt = """Você é um engenheiro sênior de automação industrial com 15 anos de experiência
 em CLPs (Allen-Bradley, Siemens S7, Schneider, WEG), protocolos industriais
@@ -95,11 +94,11 @@ Responda APENAS em JSON válido, sem markdown. Use esta estrutura:
   }
 }"""
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+        message = client.chat.completions.create(
+            model=DEFAULT_TEXT_MODEL,
             max_tokens=2000,
-            system=system_prompt,
             messages=[
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": f"Vendedor: {vendedor}\nCliente: {cliente_nome or 'Não informado'}\n\nTranscrição do áudio:\n{transcricao}"
@@ -107,7 +106,11 @@ Responda APENAS em JSON válido, sem markdown. Use esta estrutura:
             ]
         )
 
-        response_text = message.content[0].text
+        response_text = message.choices[0].message.content
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0]
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0]
         resultado = json.loads(response_text)
         return resultado
 
@@ -115,7 +118,7 @@ Responda APENAS em JSON válido, sem markdown. Use esta estrutura:
         # Se a IA retornar JSON inválido, usa fallback heurístico
         return _gerar_heuristico(transcricao, vendedor, cliente_nome)
     except Exception as e:
-        print(f"[BOM] Erro na API Anthropic: {e}. Usando fallback heurístico.")
+        print(f"[BOM] Erro na API Groq: {e}. Usando fallback heurístico.")
         return _gerar_heuristico(transcricao, vendedor, cliente_nome)
 
 

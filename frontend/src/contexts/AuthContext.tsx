@@ -10,7 +10,7 @@ interface User {
   id: string;
   nome: string;
   email: string;
-  perfil: "ceo" | "cfo" | "engenharia" | "tecnico_campo" | "vendas";
+  perfil: "ceo" | "cfo" | "engenharia" | "tecnico_campo" | "vendas" | "vendedor";
 }
 
 interface AuthContextType {
@@ -18,7 +18,7 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, senha: string) => Promise<void>;
+  login: (email: string, senha: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -46,10 +46,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, senha: string) => {
     const res = await authApi.login(email, senha);
-    const { access_token, perfil, nome } = res.data;
+    const { access_token, perfil, nome, user_id } = res.data;
+
+    let userId = user_id || "";
+    if (!userId) {
+      try {
+        localStorage.setItem("altaclp_token", access_token);
+        const me = await authApi.me();
+        userId = String(me.data.id);
+      } catch {
+        userId = "";
+      }
+    }
 
     const userData: User = {
-      id: "",
+      id: userId,
       nome,
       email,
       perfil,
@@ -59,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("altaclp_user", JSON.stringify(userData));
     setToken(access_token);
     setUser(userData);
+    return userData;
   };
 
   const logout = () => {

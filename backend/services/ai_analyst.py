@@ -30,27 +30,25 @@ Você tem acesso ao estado operacional em tempo real de toda a operação da Alt
 CONTEXTO ATUAL (atualizado em tempo real):
 {contexto_operacional}
 
-STAKEHOLDERS:
-- Marcos Tedesco (CEO, 70% ações): engenheiro mecânico, 22 anos de mercado,
-  avesso a grandes episódios, prefere problemas pequenos e controláveis.
-  Quer cortar os R$ 31.400/mês de visitas falsas. Não sabe do 4º incidente de drift.
-- Roberto (CFO, 30% ações): está em due diligence com fundo de investimento.
-  Quer múltiplo EBITDA 2-3x maior. Reunião do conselho era em 18/mai/2026.
-- Cláudia Santarém (Engenharia): coordenadora, sobrecarregada.
-  Anderson trabalhou 7 fins de semana. Júnior pediu demissão.
-  Cética com promessas de IA — quer resultados concretos e imediatos.
-- Anderson Vasconcellos: técnico de campo sênior. Fez 2 hotfixes não documentados.
-- Júnior Almeida: único engenheiro que conhece a planta da Pampulha — saindo para Atos.
-- João Vendedor: amigo pessoal do Marcos desde o colégio. Intocável. Manda áudios de 14min.
-- Sérgio do TPM: ativamente bloqueando acesso aos dados de sensor para consultoria externa.
+REGRAS DE PERFIL:
+Se o perfil for 'ceo' ou 'cfo' (Nível Executivo):
+1. Comporte-se como Assistente Executivo focado em saúde do negócio, OPEX, CAPEX, TCO, ROI e OEE.
+2. NUNCA foque em como consertar ou instalar equipamentos. Aborde alarmes pelo seu impacto financeiro, custo de horas ociosas e risco ao cronograma de projetos.
+3. Entregue resumos de criticidade (ex: "Temos 5 alarmes críticos atrasando o Projeto X, gerando custo estimado de $Y em horas ociosas").
+4. Formatação: seja objetivo e analítico. Use tabelas curtas, bullet points e liderança com KPIs e análise de riscos. Evite jargões técnicos de baixo nível, exceto para justificar custos.
+5. Sempre cruze dados de produtividade (visitas técnicas, resoluções) com orçamentos de projeto. Inclua um indicador de frescor ou confiança se os dados de campo parecerem não atualizados.
 
-RISCO CRÍTICO IMEDIATO:
-Contrato Anaclara Alimentos: R$ 780.000 | Prazo: junho/2026 | Status: em risco
-O gestor de planta (Gustavo Mendes) ameaçou cancelar se não entregar em junho.
+Se o perfil for 'engenharia' ou 'campo':
+- Foque em detalhes técnicos operacionais, troubleshooting e métricas de máquina.
 
-Responda sempre em português brasileiro. Seja direto, analítico, use números específicos.
-Priorize impacto financeiro nas suas recomendações. Adapte o tom ao perfil do usuário.
-Perfil atual: {perfil_usuario}"""
+STAKEHOLDERS PARA REFERÊNCIA:
+- Marcos Tedesco (CEO, 70% ações): Quer cortar visitas falsas.
+- Roberto (CFO): Foco em OPEX/CAPEX e múltiplo EBITDA.
+- Cláudia Santarém (Engenharia): Foco em backlog.
+- Anaclara Alimentos: Cliente crítico (R$ 780k em risco).
+
+Responda sempre em português brasileiro.
+Perfil atual do usuário: {perfil_usuario}"""
 
     @staticmethod
     def get_contexto_operacional(db: Session) -> str:
@@ -150,10 +148,11 @@ CLIENTES ATIVOS: {total_clientes}
     @classmethod
     async def analisar_planta(cls, db: Session) -> dict:
         """Análise completa com contexto real do banco."""
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        from services.groq_client import get_groq_client
+        client = get_groq_client()
         contexto = cls.get_contexto_operacional(db)
 
-        if api_key and api_key.startswith("sk-ant-"):
+        if client:
             return await cls._chamar_ia(
                 contexto=contexto,
                 perfil="ceo",
@@ -165,7 +164,7 @@ CLIENTES ATIVOS: {total_clientes}
 5. Projeção COM plano de ação implementado
 
 Formate como JSON com: resumo_executivo, riscos_criticos, acoes_recomendadas, projecao_sem_acao, projecao_com_plano""",
-                api_key=api_key
+                client=client
             )
         else:
             return cls._analise_offline(contexto)
@@ -173,20 +172,21 @@ Formate como JSON com: resumo_executivo, riscos_criticos, acoes_recomendadas, pr
     @classmethod
     async def responder_decisao(cls, pergunta: str, perfil: str, db: Session) -> dict:
         """Resposta contextualizada por perfil."""
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        from services.groq_client import get_groq_client
+        client = get_groq_client()
         contexto = cls.get_contexto_operacional(db)
 
-        if api_key and api_key.startswith("sk-ant-"):
+        if client:
             return await cls._chamar_ia(
                 contexto=contexto,
                 perfil=perfil,
                 mensagem=f"Pergunta do usuário ({perfil}):\n{pergunta}\n\nResponda de forma direta e analítica, com números específicos.",
-                api_key=api_key,
+                client=client,
                 formato="decisao"
             )
         else:
             return {
-                "resposta": f"[Modo offline — sem API key]\n\nPergunta: {pergunta}\n\nPara respostas contextualizadas com IA, configure ANTHROPIC_API_KEY no .env.",
+                "resposta": f"[Modo offline — sem API key]\n\nPergunta: {pergunta}\n\nPara respostas contextualizadas com IA, configure GROQ_API_KEY no .env.",
                 "dados_usados": ["contexto_operacional_banco"],
                 "confianca": "baixa (modo offline)",
             }
@@ -194,20 +194,21 @@ Formate como JSON com: resumo_executivo, riscos_criticos, acoes_recomendadas, pr
     @classmethod
     async def gerar_relatorio(cls, tipo: str, db: Session) -> dict:
         """Gera relatório por tipo de perfil."""
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        from services.groq_client import get_groq_client
+        client = get_groq_client()
         contexto = cls.get_contexto_operacional(db)
 
-        if api_key and api_key.startswith("sk-ant-"):
+        if client:
             return await cls._chamar_ia(
                 contexto=contexto,
                 perfil=tipo,
                 mensagem=f"Gere um relatório executivo completo para o perfil '{tipo}'. Inclua KPIs relevantes, riscos e recomendações.",
-                api_key=api_key,
+                client=client,
                 formato="relatorio"
             )
         else:
             return {
-                "relatorio": f"[Relatório {tipo.upper()} — Modo offline]\n\n{contexto}\n\nPara relatórios com IA, configure ANTHROPIC_API_KEY.",
+                "relatorio": f"[Relatório {tipo.upper()} — Modo offline]\n\n{contexto}\n\nPara relatórios com IA, configure GROQ_API_KEY.",
                 "secoes": ["Contexto Operacional", "KPIs", "Riscos", "Recomendações"],
                 "data_geracao": datetime.utcnow().isoformat(),
             }
@@ -215,22 +216,19 @@ Formate como JSON com: resumo_executivo, riscos_criticos, acoes_recomendadas, pr
     @classmethod
     async def chat(cls, mensagem: str, historico: list, perfil: str, db: Session) -> dict:
         """Chat com histórico de conversa."""
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        from services.groq_client import get_groq_client, DEFAULT_TEXT_MODEL
+        client = get_groq_client()
         contexto = cls.get_contexto_operacional(db)
 
-        if api_key and api_key.startswith("sk-ant-"):
+        if client:
             try:
-                import anthropic
-
-                client = anthropic.Anthropic(api_key=api_key)
-
                 system_prompt = cls.SYSTEM_PROMPT_BASE.format(
                     contexto_operacional=contexto,
                     perfil_usuario=perfil
                 )
 
                 # Monta mensagens com histórico
-                messages = []
+                messages = [{"role": "system", "content": system_prompt}]
                 for msg in historico[-10:]:  # Últimas 10 mensagens
                     messages.append({
                         "role": msg.get("role", "user"),
@@ -238,51 +236,50 @@ Formate como JSON com: resumo_executivo, riscos_criticos, acoes_recomendadas, pr
                     })
                 messages.append({"role": "user", "content": mensagem})
 
-                response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                response = client.chat.completions.create(
+                    model=DEFAULT_TEXT_MODEL,
                     max_tokens=2000,
-                    system=system_prompt,
                     messages=messages,
                 )
 
                 return {
-                    "resposta": response.content[0].text,
-                    "tokens_usados": response.usage.input_tokens + response.usage.output_tokens,
+                    "resposta": response.choices[0].message.content,
+                    "tokens_usados": response.usage.total_tokens if response.usage else 0,
                 }
 
             except Exception as e:
                 return {
-                    "resposta": f"Erro na API: {str(e)}. Verifique sua ANTHROPIC_API_KEY.",
+                    "resposta": f"Erro na API: {str(e)}. Verifique sua GROQ_API_KEY.",
                     "tokens_usados": 0,
                 }
         else:
             return {
-                "resposta": f"[Modo offline]\n\nSua mensagem: {mensagem}\n\nContexto atual:\n{contexto}\n\nPara chat com IA, configure ANTHROPIC_API_KEY no .env.",
+                "resposta": f"[Modo offline]\n\nSua mensagem: {mensagem}\n\nContexto atual:\n{contexto}\n\nPara chat com IA, configure GROQ_API_KEY no .env.",
                 "tokens_usados": 0,
             }
 
     @classmethod
     async def _chamar_ia(cls, contexto: str, perfil: str, mensagem: str,
-                         api_key: str, formato: str = "analise") -> dict:
-        """Chamada genérica à Anthropic API com tratamento de erros."""
+                         client, formato: str = "analise") -> dict:
+        """Chamada genérica à Groq API com tratamento de erros."""
         try:
-            import anthropic
-
-            client = anthropic.Anthropic(api_key=api_key)
+            from services.groq_client import DEFAULT_TEXT_MODEL
 
             system_prompt = cls.SYSTEM_PROMPT_BASE.format(
                 contexto_operacional=contexto,
                 perfil_usuario=perfil
             )
 
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+            response = client.chat.completions.create(
+                model=DEFAULT_TEXT_MODEL,
                 max_tokens=3000,
-                system=system_prompt,
-                messages=[{"role": "user", "content": mensagem}],
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": mensagem}
+                ],
             )
 
-            texto = response.content[0].text
+            texto = response.choices[0].message.content
 
             # Tenta parsear como JSON
             try:
@@ -313,7 +310,7 @@ Formate como JSON com: resumo_executivo, riscos_criticos, acoes_recomendadas, pr
         except Exception as e:
             error_msg = str(e)
             if "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
-                error_msg = "API key inválida. Verifique ANTHROPIC_API_KEY no .env."
+                error_msg = "API key inválida. Verifique GROQ_API_KEY no .env."
 
             return {
                 "erro": error_msg,

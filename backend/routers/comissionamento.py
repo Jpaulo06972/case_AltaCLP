@@ -13,14 +13,41 @@ from sqlalchemy import desc
 from database.connection import get_db
 from database.models import (
     Comissionamento, Maquina, Cliente,
-    StatusComissionamento
+    StatusComissionamento, FaseProjeto,
+    ProjetoPendencia, ProjetoHistorico, PerfilUsuario, Projeto
 )
 from schemas.schemas import AtualizarStatusComissionamentoRequest
+from pydantic import BaseModel
+import uuid as uuid_mod
+from routers.auth import get_usuario_atual
+from database.models import Usuario
+from services.tecnico_scope import is_tecnico, get_projeto_ids_atribuidos, assert_projeto_acesso
 
 router = APIRouter(prefix="/comissionamentos", tags=["Comissionamento"])
 
 
-def _enriquecer_comissionamento(c, maq_codigo, cli_nome) -> dict:
+def _filtrar_projetos_acesso(query, db: Session, usuario: Usuario):
+    if usuario.perfil == PerfilUsuario.vendedor:
+        # Vendedores só veem projetos que eles criaram (id_vendedor na tabela projetos)
+        return query.join(Projeto, Maquina.id_projeto == Projeto.id).filter(Projeto.id_vendedor == usuario.id)
+    if not is_tecnico(usuario):
+        # Engenharia, CEO e CFO veem todos os projetos (nenhum filtro aplicado)
+        return query
+    
+    # Técnicos de campo só veem projetos atribuídos
+    ids = get_projeto_ids_atribuidos(db, usuario.id)
+    if not ids:
+        return query.filter(Comissionamento.id == None)  # noqa: E711
+    return query.filter(Comissionamento.id.in_(ids))
+
+
+def assert_editable_by_vendedor(comiss: Comissionamento, usuario: Usuario):
+    if usuario.perfil == PerfilUsuario.vendedor:
+        if comiss.fase_projeto not in [FaseProjeto.awaiting_engineering, FaseProjeto.vendor_quote]:
+            raise HTTPException(status_code=403, detail="Projeto aceito pela engenharia. Acesso restrito apenas para leitura.")
+
+
+def _enriquecer_comissionamento(c, maq_codigo, cli_nome, id_projeto=None) -> dict:
     """Converte comissionamento ORM para dict com cálculos."""
     # Calcula dias de atraso dinâmicamente
     dias_atraso = c.dias_atraso or 0
@@ -35,6 +62,7 @@ def _enriquecer_comissionamento(c, maq_codigo, cli_nome) -> dict:
 
     return {
         "id": str(c.id),
+        "id_projeto": id_projeto,  # PROJ-xxx string from Maquina.id_projeto
         "maquina_id": str(c.maquina_id),
         "cliente_id": str(c.cliente_id),
         "maquina_codigo": maq_codigo,
@@ -54,6 +82,9 @@ def _enriquecer_comissionamento(c, maq_codigo, cli_nome) -> dict:
         "observacoes": c.observacoes,
         "checklist_json": c.checklist_json,
         "bom_json": c.bom_json,
+        "fase_projeto": c.fase_projeto.value if c.fase_projeto else None,
+        "especificacoes_tecnicas": c.especificacoes_tecnicas,
+        "resumo_cotacao": c.resumo_cotacao,
     }
 
 
@@ -64,7 +95,8 @@ def listar_comissionamentos(
     com_atraso: bool = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
 ):
     """Lista comissionamentos com filtros e paginação."""
     query = db.query(Comissionamento, Maquina.codigo, Cliente.nome).join(
@@ -72,6 +104,7 @@ def listar_comissionamentos(
     ).join(
         Cliente, Comissionamento.cliente_id == Cliente.id
     )
+    query = _filtrar_projetos_acesso(query, db, usuario)
 
     # Filtra apenas os que não estão concluídos/cancelados por padrão
     statuses_ativos = [
@@ -110,7 +143,10 @@ def listar_comissionamentos(
 
 
 @router.get("/kanban")
-def kanban(db: Session = Depends(get_db)):
+def kanban(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
     """Retorna comissionamentos agrupados por status para o kanban."""
     result = {}
     for status_val in [
@@ -119,11 +155,13 @@ def kanban(db: Session = Depends(get_db)):
         StatusComissionamento.fat_pendente,
         StatusComissionamento.treinamento_operador,
     ]:
-        itens = db.query(Comissionamento, Maquina.codigo, Cliente.nome).join(
+        q = db.query(Comissionamento, Maquina.codigo, Cliente.nome, Maquina.id_projeto).join(
             Maquina, Comissionamento.maquina_id == Maquina.id
         ).join(
             Cliente, Comissionamento.cliente_id == Cliente.id
-        ).filter(
+        )
+        q = _filtrar_projetos_acesso(q, db, usuario)
+        itens = q.filter(
             Comissionamento.status == status_val
         ).order_by(
             desc(Comissionamento.risco_cancelamento),
@@ -131,7 +169,8 @@ def kanban(db: Session = Depends(get_db)):
         ).all()
 
         result[status_val.value] = [
-            _enriquecer_comissionamento(c, maq, cli) for c, maq, cli in itens
+            _enriquecer_comissionamento(c, maq, cli, id_projeto=id_proj)
+            for c, maq, cli, id_proj in itens
         ]
 
     return result
@@ -221,7 +260,8 @@ def detalhe_comissionamento(comissionamento_id: UUID, db: Session = Depends(get_
 def atualizar_status(
     comissionamento_id: UUID,
     body: AtualizarStatusComissionamentoRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual)
 ):
     """Atualiza status do comissionamento."""
     comiss = db.query(Comissionamento).filter(
@@ -230,6 +270,8 @@ def atualizar_status(
 
     if not comiss:
         raise HTTPException(status_code=404, detail="Comissionamento não encontrado")
+
+    assert_editable_by_vendedor(comiss, usuario)
 
     try:
         comiss.status = body.novo_status
@@ -253,3 +295,170 @@ def atualizar_status(
         "comissionamento_id": str(comissionamento_id),
         "novo_status": body.novo_status,
     }
+
+
+class FaseUpdateRequest(BaseModel):
+    fase: str
+    usuario: str = "engenharia"
+
+
+class SpecsUpdateRequest(BaseModel):
+    especificacoes: dict
+    usuario: str = "engenharia"
+
+
+class PendenciaToggleRequest(BaseModel):
+    pendencia_id: str
+    concluida: bool
+    usuario: str = "engenharia"
+
+
+@router.get("/pipeline/funil")
+def pipeline_funil(db: Session = Depends(get_db), usuario: Usuario = Depends(get_usuario_atual)):
+    """Visão funnel/kanban por fase de projeto."""
+    fases = [f.value for f in FaseProjeto]
+    resultado = {f: [] for f in fases}
+    query = db.query(Comissionamento, Maquina.codigo, Cliente.nome).join(
+        Maquina, Comissionamento.maquina_id == Maquina.id
+    ).join(Cliente, Comissionamento.cliente_id == Cliente.id)
+    query = _filtrar_projetos_acesso(query, db, usuario)
+    items = query.all()
+    for c, maq, cli in items:
+        fase = c.fase_projeto.value if c.fase_projeto else FaseProjeto.awaiting_engineering.value
+        if fase not in resultado:
+            fase = FaseProjeto.awaiting_engineering.value
+        resultado[fase].append(_enriquecer_comissionamento(c, maq, cli))
+    return {"fases": fases, "pipeline": resultado}
+
+
+@router.get("/{comissionamento_id}/detalhe-projeto")
+def detalhe_projeto(
+    comissionamento_id: UUID,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    assert_projeto_acesso(db, usuario, comissionamento_id)
+    result = db.query(Comissionamento, Maquina.codigo, Cliente.nome).join(
+        Maquina, Comissionamento.maquina_id == Maquina.id
+    ).join(
+        Cliente, Comissionamento.cliente_id == Cliente.id
+    ).filter(Comissionamento.id == comissionamento_id).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado")
+    c, maq, cli = result
+    pendencias = db.query(ProjetoPendencia).filter(
+        ProjetoPendencia.comissionamento_id == comissionamento_id
+    ).order_by(ProjetoPendencia.ordem).all()
+    historico = db.query(ProjetoHistorico).filter(
+        ProjetoHistorico.comissionamento_id == comissionamento_id
+    ).order_by(desc(ProjetoHistorico.data_hora)).all()
+    total = len(pendencias) or 1
+    concluidas = sum(1 for p in pendencias if p.concluida)
+    return {
+        "projeto": _enriquecer_comissionamento(c, maq, cli),
+        "resumo_cotacao": c.resumo_cotacao or {"itens": c.bom_json or [], "origem": "vendas"},
+        "pendencias": [
+            {
+                "id": str(p.id),
+                "titulo": p.titulo,
+                "descricao": p.descricao,
+                "ordem": p.ordem,
+                "concluida": p.concluida,
+                "status_tarefa": p.status_tarefa.value if p.status_tarefa else "pendente",
+                "fase": p.fase,
+            }
+            for p in pendencias
+        ],
+        "progresso_pct": round(concluidas / total * 100, 1),
+        "historico": [
+            {
+                "acao_realizada": h.acao_realizada,
+                "id_usuario": h.id_usuario,
+                "data_hora": h.data_hora.isoformat() if h.data_hora else None,
+            }
+            for h in historico
+        ],
+    }
+
+
+@router.put("/{comissionamento_id}/fase")
+def atualizar_fase(
+    comissionamento_id: UUID,
+    body: FaseUpdateRequest,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual)
+):
+    comiss = db.query(Comissionamento).filter(Comissionamento.id == comissionamento_id).first()
+    if not comiss:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado")
+    
+    assert_editable_by_vendedor(comiss, usuario)
+    
+    comiss.fase_projeto = body.fase
+    db.add(ProjetoHistorico(
+        comissionamento_id=comissionamento_id,
+        acao_realizada=f"Transição de fase → {body.fase}",
+        id_usuario=body.usuario,
+    ))
+    db.commit()
+    return {"fase": body.fase}
+
+
+@router.put("/{comissionamento_id}/especificacoes")
+def atualizar_especificacoes(
+    comissionamento_id: UUID,
+    body: SpecsUpdateRequest,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual)
+):
+    comiss = db.query(Comissionamento).filter(Comissionamento.id == comissionamento_id).first()
+    if not comiss:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado")
+    
+    assert_editable_by_vendedor(comiss, usuario)
+    
+    comiss.especificacoes_tecnicas = body.especificacoes
+    db.add(ProjetoHistorico(
+        comissionamento_id=comissionamento_id,
+        acao_realizada="Especificações técnicas atualizadas",
+        id_usuario=body.usuario,
+    ))
+    db.commit()
+    return {"mensagem": "Especificações salvas"}
+
+
+@router.post("/{comissionamento_id}/aprovar-especificacao")
+def aprovar_especificacao(comissionamento_id: UUID, db: Session = Depends(get_db), usuario: Usuario = Depends(get_usuario_atual)):
+    comiss = db.query(Comissionamento).filter(Comissionamento.id == comissionamento_id).first()
+    if not comiss:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado")
+    
+    assert_editable_by_vendedor(comiss, usuario)
+    
+    comiss.fase_projeto = FaseProjeto.in_execution
+    db.add(ProjetoHistorico(
+        comissionamento_id=comissionamento_id,
+        acao_realizada="Especificação aprovada pela engenharia",
+        id_usuario="engenharia",
+    ))
+    db.commit()
+    return {"fase": FaseProjeto.in_execution.value}
+
+
+@router.put("/pendencias/toggle")
+def toggle_pendencia(body: PendenciaToggleRequest, db: Session = Depends(get_db)):
+    from uuid import UUID as U
+
+    p = db.query(ProjetoPendencia).filter(ProjetoPendencia.id == U(body.pendencia_id)).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Pendência não encontrada")
+    p.concluida = body.concluida
+    if body.concluida:
+        p.data_conclusao = datetime.utcnow()
+    db.add(ProjetoHistorico(
+        comissionamento_id=p.comissionamento_id,
+        acao_realizada=f"Pendência '{p.titulo}' {'concluída' if body.concluida else 'reaberta'}",
+        id_usuario=body.usuario,
+    ))
+    db.commit()
+    return {"concluida": body.concluida}

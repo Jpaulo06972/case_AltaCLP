@@ -14,11 +14,17 @@ from sqlalchemy import func, desc
 
 from database.connection import get_db
 from database.models import (
-    Alerta, Maquina, Cliente,
-    StatusAlerta, SeveridadeAlerta, TipoAlerta
+    Alerta, Maquina, Cliente, Usuario, Projeto,
+    StatusAlerta, SeveridadeAlerta, TipoAlerta,
+    AnaliseAlarme, AgendamentoManutencao, ProjetoTecnico,
 )
+from routers.auth import get_usuario_atual
+from services.tecnico_scope import filtrar_alertas_query, is_tecnico
 from schemas.schemas import ResolverAlertaRequest
 from services.simulator import TelemetriaSimulator
+from services.eng_rag import analisar_causa_raiz_alarme
+from pydantic import BaseModel
+import uuid as uuid_mod
 
 router = APIRouter(prefix="/alertas", tags=["Alertas"])
 
@@ -33,7 +39,8 @@ def listar_alertas(
     data_fim: str = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
 ):
     """Lista alertas com filtros completos e paginação."""
     query = db.query(Alerta, Maquina.codigo, Cliente.nome).join(
@@ -41,6 +48,7 @@ def listar_alertas(
     ).join(
         Cliente, Alerta.cliente_id == Cliente.id
     )
+    query = filtrar_alertas_query(query, db, usuario)
 
     if severidade:
         query = query.filter(Alerta.severidade == severidade)
@@ -69,6 +77,14 @@ def listar_alertas(
 
     dados = []
     for alerta, maquina_codigo, cliente_nome in resultados:
+        # Fetch linked project via machine
+        maq = db.query(Maquina).filter(Maquina.codigo == maquina_codigo).first()
+        id_proj = maq.id_projeto if maq else None
+        nome_proj = None
+        if id_proj:
+            proj = db.query(Projeto).filter(Projeto.id == id_proj).first()
+            nome_proj = proj.nome_contrato if proj else None
+
         dados.append({
             "id": str(alerta.id),
             "maquina_id": str(alerta.maquina_id),
@@ -83,13 +99,17 @@ def listar_alertas(
             "timestamp_criacao": alerta.timestamp_criacao.isoformat() if alerta.timestamp_criacao else None,
             "timestamp_resolucao": alerta.timestamp_resolucao.isoformat() if alerta.timestamp_resolucao else None,
             "status": alerta.status.value,
+            "status_acao": alerta.status.value,
             "foi_visita_gerada": alerta.foi_visita_gerada,
             "custo_visita": float(alerta.custo_visita) if alerta.custo_visita else None,
             "tecnico_responsavel": alerta.tecnico_responsavel,
             "is_falso_alerta": alerta.is_falso_alerta,
             "origem": alerta.origem.value if alerta.origem else None,
             "maquina_codigo": maquina_codigo,
+            "nome_maquina": maquina_codigo,
             "cliente_nome": cliente_nome,
+            "id_projeto": id_proj,
+            "nome_projeto": nome_proj,
         })
 
     return {
@@ -280,4 +300,139 @@ def resolver_alerta(
         "alerta_id": str(alerta.id),
         "status": alerta.status.value,
         "foi_falso_alerta": alerta.is_falso_alerta,
+    }
+
+
+class AprovarSugestaoRequest(BaseModel):
+    id_tecnico: str
+    data_agendada: str
+    notificar_cliente: bool = True
+
+
+class RelatorioManualRequest(BaseModel):
+    diretiva: str
+    id_tecnico: str
+    data_agendada: str
+
+
+@router.get("/{alerta_id}/analise-ia")
+async def obter_analise_ia(alerta_id: UUID, db: Session = Depends(get_db)):
+    """Retorna análise de causa raiz (pré-gerada ou sob demanda)."""
+    existente = db.query(AnaliseAlarme).filter(AnaliseAlarme.alerta_id == alerta_id).first()
+    if existente:
+        return {
+            "alerta_id": str(alerta_id),
+            "texto_analise": existente.texto_analise,
+            "sugestao_acao": existente.sugestao_acao,
+            "gerado_em": existente.gerado_em.isoformat() if existente.gerado_em else None,
+            "cache": True,
+        }
+    texto = await analisar_causa_raiz_alarme(db, str(alerta_id))
+    analise = AnaliseAlarme(
+        id=uuid_mod.uuid4(),
+        alerta_id=alerta_id,
+        texto_analise=texto,
+        sugestao_acao="Despachar técnico para inspeção in loco nas próximas 24h.",
+    )
+    db.add(analise)
+    db.commit()
+    return {
+        "alerta_id": str(alerta_id),
+        "texto_analise": texto,
+        "sugestao_acao": analise.sugestao_acao,
+        "cache": False,
+    }
+
+
+def _simular_notificacoes(alerta: Alerta, tecnico: str, data_ag: datetime, cliente_nome: str):
+    return {
+        "whatsapp_cliente": f"Alerta {alerta.codigo_alerta} registrado — equipe acionada.",
+        "email_tecnico": f"OS #{alerta.codigo_alerta} — agendado {data_ag.strftime('%d/%m/%Y %H:%M')} — {cliente_nome}",
+        "enviado": True,
+    }
+
+
+@router.post("/{alerta_id}/aprovar-sugestao")
+async def aprovar_sugestao_ia(
+    alerta_id: UUID,
+    body: AprovarSugestaoRequest,
+    db: Session = Depends(get_db),
+):
+    """Aprova sugestão IA e agenda técnico automaticamente."""
+    alerta = db.query(Alerta).filter(Alerta.id == alerta_id).first()
+    if not alerta:
+        raise HTTPException(status_code=404, detail="Alerta não encontrado")
+    data_ag = datetime.fromisoformat(body.data_agendada.replace("Z", ""))
+    ag = AgendamentoManutencao(
+        id=uuid_mod.uuid4(),
+        alerta_id=alerta_id,
+        id_tecnico=body.id_tecnico,
+        id_cliente=alerta.cliente_id,
+        data_agendada=data_ag,
+        aprovado_ia=True,
+        notificacao_enviada=True,
+    )
+    alerta.status = StatusAlerta.em_investigacao
+    alerta.tecnico_responsavel = body.id_tecnico
+    db.add(ag)
+    cliente = db.query(Cliente).filter(Cliente.id == alerta.cliente_id).first()
+    db.commit()
+    notif = _simular_notificacoes(alerta, body.id_tecnico, data_ag, cliente.nome if cliente else "")
+    return {
+        "agendamento_id": str(ag.id),
+        "data_agendada": data_ag.isoformat(),
+        "tecnico": body.id_tecnico,
+        "notificacoes": notif,
+    }
+
+
+@router.post("/{alerta_id}/relatorio-manual")
+def relatorio_manual(
+    alerta_id: UUID,
+    body: RelatorioManualRequest,
+    db: Session = Depends(get_db),
+):
+    """Engenheiro envia diretiva manual ao técnico."""
+    alerta = db.query(Alerta).filter(Alerta.id == alerta_id).first()
+    if not alerta:
+        raise HTTPException(status_code=404, detail="Alerta não encontrado")
+    data_ag = datetime.fromisoformat(body.data_agendada.replace("Z", ""))
+    ag = AgendamentoManutencao(
+        id=uuid_mod.uuid4(),
+        alerta_id=alerta_id,
+        id_tecnico=body.id_tecnico,
+        id_cliente=alerta.cliente_id,
+        data_agendada=data_ag,
+        diretiva_manual=body.diretiva,
+        aprovado_ia=False,
+        notificacao_enviada=True,
+    )
+    alerta.tecnico_responsavel = body.id_tecnico
+    alerta.status = StatusAlerta.em_investigacao
+    db.add(ag)
+    db.commit()
+    return {
+        "agendamento_id": str(ag.id),
+        "diretiva": body.diretiva,
+        "data_agendada": data_ag.isoformat(),
+    }
+
+
+@router.get("/{alerta_id}/agendamento")
+def obter_agendamento(alerta_id: UUID, db: Session = Depends(get_db)):
+    ag = (
+        db.query(AgendamentoManutencao)
+        .filter(AgendamentoManutencao.alerta_id == alerta_id)
+        .order_by(desc(AgendamentoManutencao.criado_em))
+        .first()
+    )
+    if not ag:
+        return {"agendado": False}
+    return {
+        "agendado": True,
+        "id_tecnico": ag.id_tecnico,
+        "data_agendada": ag.data_agendada.isoformat(),
+        "aprovado_ia": ag.aprovado_ia,
+        "diretiva_manual": ag.diretiva_manual,
+        "status": ag.status,
     }

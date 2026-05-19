@@ -1,28 +1,33 @@
-# Ambiente Python / Backend
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-env/
+# Environment variables - NEVER commit this file
 .env
+.env.local
+.env.production
+.env.*.local
 
-# Banco de dados
-*.sqlite3
-*.db
-backend/altaclp_db.db
-
-# Frontend (Node / React)
+# Dependencies
 node_modules/
+backend/.venv/
+.venv/
+
+# Build outputs
 dist/
 build/
-.npm/
+.next/
+out/
+__pycache__/
 
-# IDE e Sistema
+# Logs
+*.log
+npm-debug.log*
+
+# Database
+*.db
+*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor configs
 .vscode/
 .idea/
-.DS_Store
-*.swp
-Thumbs.db
-.cursor/
-.agent/

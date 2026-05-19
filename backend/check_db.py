@@ -1,16 +1,16 @@
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sqlite3
+conn = sqlite3.connect('altaclp_db.db')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
 
-from database.connection import SessionLocal
-from database.models import Cliente, LeituraSensor
+cur.execute('SELECT COUNT(*) as total FROM maquinas')
+total = cur.fetchone()['total']
+cur.execute('SELECT COUNT(*) as cnt FROM maquinas WHERE id_projeto IS NOT NULL')
+with_proj = cur.fetchone()['cnt']
+print(f'Total machines: {total}, with id_projeto: {with_proj}')
 
-db = SessionLocal()
-try:
-    clientes = db.query(Cliente).count()
-    leituras = db.query(LeituraSensor).count()
-    print(f"CLIENTES: {clientes}")
-    print(f"LEITURAS: {leituras}")
-except Exception as e:
-    print(f"ERRO: {e}")
-finally:
-    db.close()
+cur.execute('SELECT codigo, id_projeto FROM maquinas LIMIT 8')
+for r in cur.fetchall():
+    print(dict(r))
+
+conn.close()

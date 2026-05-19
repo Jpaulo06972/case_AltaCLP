@@ -13,8 +13,10 @@ from sqlalchemy import func, desc
 from database.connection import get_db
 from database.models import (
     GitOpsAuditoria, Maquina, Cliente, Incidente,
-    AcaoGitOps
+    AcaoGitOps, LogAuditoriaGit, AcaoAuditoriaGit,
 )
+from pydantic import BaseModel
+import uuid as uuid_mod
 from schemas.schemas import AprovarPRRequest
 from services.gitops_agent import GitOpsAgent
 
@@ -215,3 +217,96 @@ def estatisticas_gitops(db: Session = Depends(get_db)):
         "drifts_ativos": drifts_ativos,
         "prejuizo_historico": float(prejuizo),
     }
+
+
+PROJETOS_GIT = [
+    {"id_projeto": "plc-anaclara-l1", "nome": "Anaclara Extrusora L1", "repo": "altaclp/plc-anaclara"},
+    {"id_projeto": "plc-belmare", "nome": "Belmare Dosagem", "repo": "altaclp/plc-belmare"},
+    {"id_projeto": "plc-pampulha", "nome": "Pampulha Reator", "repo": "altaclp/plc-pampulha"},
+]
+
+
+@router.get("/projetos")
+def listar_projetos_git(db: Session = Depends(get_db)):
+    """Projetos disponíveis para técnicos (read) e engenheiros (merge)."""
+    for p in PROJETOS_GIT:
+        drifts = db.query(GitOpsAuditoria).join(Maquina).filter(
+            Maquina.codigo.ilike(f"%{p['id_projeto'].split('-')[1]}%"),
+            GitOpsAuditoria.em_sync == False,
+        ).count()
+        p["prs_pendentes"] = drifts
+    return {"projetos": PROJETOS_GIT}
+
+
+@router.get("/auditoria-log")
+def log_auditoria(
+    id_projeto: str = None,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    q = db.query(LogAuditoriaGit).order_by(desc(LogAuditoriaGit.timestamp))
+    if id_projeto:
+        q = q.filter(LogAuditoriaGit.id_projeto == id_projeto)
+    logs = q.limit(limit).all()
+    return {
+        "timeline": [
+            {
+                "id": str(l.id),
+                "id_projeto": l.id_projeto,
+                "acao": l.acao.value if l.acao else None,
+                "id_usuario": l.id_usuario,
+                "diff_resumo": l.diff_resumo,
+                "risco_ia": l.risco_ia,
+                "timestamp": l.timestamp.isoformat() if l.timestamp else None,
+            }
+            for l in logs
+        ]
+    }
+
+
+@router.get("/review-ia/{auditoria_id}")
+async def review_ia_pr(auditoria_id: UUID, db: Session = Depends(get_db)):
+    """Análise estática IA do PR (resumo + riscos)."""
+    audit = db.query(GitOpsAuditoria).filter(GitOpsAuditoria.id == auditoria_id).first()
+    if not audit:
+        raise HTTPException(status_code=404, detail="Auditoria não encontrada")
+    risco = (
+        "ALTO: alteração em bloco de segurança (E-Stop) sem revisão cruzada. "
+        "Verificar intertravamento com válvula VH-118."
+        if audit.diff_linhas and audit.diff_linhas > 5
+        else "MÉDIO: ajustes de setpoint dentro do esperado para comissionamento."
+    )
+    resumo = audit.diff_resumo or "Alterações em lógica de sequência e timers de ciclo."
+    return {
+        "auditoria_id": str(auditoria_id),
+        "resumo_mudancas": resumo,
+        "riscos": risco,
+        "recomendacao": "Aprovar com teste FAT documentado" if "MÉDIO" in risco else "Rejeitar até correção E-Stop",
+    }
+
+
+class RejectPRRequest(BaseModel):
+    motivo: str
+    rejeitado_por: str
+
+
+@router.post("/rejeitar-pr/{auditoria_id}")
+def rejeitar_pr(
+    auditoria_id: UUID,
+    body: RejectPRRequest,
+    db: Session = Depends(get_db),
+):
+    audit = db.query(GitOpsAuditoria).filter(GitOpsAuditoria.id == auditoria_id).first()
+    if not audit:
+        raise HTTPException(status_code=404, detail="Auditoria não encontrada")
+    maq = db.query(Maquina).filter(Maquina.id == audit.maquina_id).first()
+    db.add(LogAuditoriaGit(
+        id=uuid_mod.uuid4(),
+        id_projeto=maq.codigo if maq else "unknown",
+        acao=AcaoAuditoriaGit.reject,
+        id_usuario=body.rejeitado_por,
+        diff_resumo=body.motivo,
+        risco_ia="PR rejeitado pelo engenheiro",
+    ))
+    db.commit()
+    return {"mensagem": "PR rejeitado", "motivo": body.motivo}

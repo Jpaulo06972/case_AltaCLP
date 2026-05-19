@@ -369,6 +369,7 @@ def run_seed():
         ("Roberto CFO","roberto.cfo@altaclp.com.br",PerfilUsuario.cfo),
         ("Cláudia Santarém","claudia.eng@altaclp.com.br",PerfilUsuario.engenharia),
         ("Anderson Vasconcellos","anderson.campo@altaclp.com.br",PerfilUsuario.tecnico_campo),
+        ("João Vendedor","joao.vendas@altaclp.com.br",PerfilUsuario.vendedor),
     ]
     for nome, email, perfil in users:
         db.add(Usuario(
@@ -377,7 +378,75 @@ def run_seed():
             perfil=perfil, ativo=True,
         ))
     db.flush()
-    print("  [OK] 4 usuarios")
+    print("  [OK] 5 usuarios")
+
+    # === ATRIBUIÇÃO TÉCNICOS ↔ PROJETOS ===
+    anderson = db.query(Usuario).filter(Usuario.email == "anderson.campo@altaclp.com.br").first()
+    coms_ativos = db.query(Comissionamento).filter(
+        Comissionamento.status.in_([
+            StatusComissionamento.em_andamento,
+            StatusComissionamento.fat_pendente,
+            StatusComissionamento.aguardando_dados,
+        ])
+    ).limit(8).all()
+    if anderson:
+        for com in coms_ativos:
+            db.add(ProjetoTecnico(
+                id=uuid.uuid4(),
+                id_projeto=com.id,
+                id_tecnico=anderson.id,
+                ativo=True,
+            ))
+        db.flush()
+        print(f"  [OK] {len(coms_ativos)} atribuicoes projeto_tecnicos (Anderson)")
+
+    # === VISITAS TÉCNICAS + CUSTOS (IA queries) ===
+    for i in range(40):
+        cli = random.choice(clientes)
+        db.add(VisitaTecnica(
+            id=uuid.uuid4(),
+            cliente_id=cli.id,
+            tecnico_nome=random.choice(TECNICOS),
+            custo=Decimal(str(random.randint(800, 3500))),
+            motivo="Inspeção por alerta",
+            foi_falso_alerta=random.random() < 0.6,
+            data_visita=now - timedelta(days=random.randint(0, 45)),
+        ))
+    for i in range(20):
+        db.add(CustoOperacional(
+            id=uuid.uuid4(),
+            cliente_id=random.choice(clientes).id,
+            categoria=random.choice(["manutenção", "peças", "deslocamento"]),
+            valor=Decimal(str(random.randint(500, 8000))),
+            data_referencia=now - timedelta(days=random.randint(0, 30)),
+        ))
+    db.flush()
+    print("  [OK] visitas tecnicas + custos operacionais")
+
+    # === PENDÊNCIAS DE PROJETO (comissionamento Anaclara) ===
+    com_anaclara = db.query(Comissionamento).join(Cliente).filter(Cliente.nome.ilike("%anaclara%")).first()
+    if com_anaclara:
+        etapas = [
+            "Aprovar especificação técnica",
+            "FAT — teste de fábrica",
+            "Instalação I/O",
+            "Comunicação Modbus/OPC UA",
+            "Treinamento operador",
+            "Pós-venda — documentação",
+        ]
+        for i, titulo in enumerate(etapas):
+            db.add(ProjetoPendencia(
+                id=uuid.uuid4(),
+                comissionamento_id=com_anaclara.id,
+                titulo=titulo,
+                ordem=i,
+                concluida=i < 2,
+                status_tarefa=StatusTarefaPendencia.concluida if i < 2 else StatusTarefaPendencia.pendente,
+                fase="IN_EXECUTION" if i < 4 else "POST_SALE",
+            ))
+        com_anaclara.fase_projeto = FaseProjeto.in_execution
+        com_anaclara.resumo_cotacao = {"cliente": "Anaclara", "valor": 195000, "itens": 12}
+    db.flush()
 
     db.commit()
     db.close()

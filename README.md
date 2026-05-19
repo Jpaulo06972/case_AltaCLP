@@ -16,7 +16,8 @@ A operação diária de chão de fábrica e gestão de CLPs (Controladores Lógi
 **A AltaCLP Intelligence resolve tudo isso usando IA:**
 - 🧠 **Motor Preditivo (Threshold Engine)**: Calcula thresholds dinâmicos baseados no histórico real do cliente para ignorar falsos positivos.
 - 🛡️ **GitOps Agent**: Monitora e compara o hash do código que está rodando no CLP físico com o repositório no Git. Se houver divergência, ele detecta, alerta e sugere um Pull Request reverso.
-- 💬 **Orçamentador de IA**: Transforma áudios e textos soltos dos técnicos em campo diretamente em orçamentos estruturados (BOM) usando processamento de linguagem natural.
+- 💬 **Orçamentador de IA + Comissionamento**: Transforma áudios e textos soltos dos técnicos em campo diretamente em orçamentos estruturados (BOM) usando IA. Ao aprovar, o orçamentador materializa automaticamente o projeto e a máquina física (CLP) no Kanban de Comissionamento para a Engenharia.
+- 🔄 **Sincronização de Estado em Tempo Real (Kanban)**: O painel de acompanhamento sincroniza de forma transparente e instantânea (via polling) o progresso do projeto entre Vendedores (que criam) e a equipe de Engenharia (que visualiza e dá andamento) — com regras rígidas de RBAC (Role-Based Access Control) aplicadas em banco de dados.
 
 ---
 

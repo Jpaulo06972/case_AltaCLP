@@ -54,17 +54,17 @@ Certifique-se de ter instalado:
 Abra um terminal na raiz do projeto e siga os passos:
 
 ```powershell
-# 1. Entre na pasta do backend
-cd backend
-
-# 2. Crie o ambiente virtual Python (apenas na primeira vez)
+# 1. Crie o ambiente virtual Python (caso não exista)
 python -m venv .venv
 
-# 3. Ative o ambiente virtual
+# 2. Instale as dependências (apenas na primeira vez)
+.\.venv\Scripts\pip install -r requirements.txt
+
+# 3. Ative o ambiente virtual Python
 .\.venv\Scripts\Activate.ps1
 
-# 4. Instale as dependências
-.\.venv\Scripts\pip install -r requirements.txt
+# 4. Entre na pasta do backend
+cd backend
 
 # 5. Inicie o servidor
 uvicorn main:app --reload

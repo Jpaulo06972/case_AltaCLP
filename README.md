@@ -54,13 +54,19 @@ Certifique-se de ter instalado:
 Abra um terminal na raiz do projeto e siga os passos:
 
 ```powershell
-# 1. Ative o ambiente virtual Python
-.\.venv\Scripts\Activate.ps1
-
-# 2. Entre na pasta do backend
+# 1. Entre na pasta do backend
 cd backend
 
-# 3. Inicie o servidor
+# 2. Crie o ambiente virtual Python (apenas na primeira vez)
+python -m venv .venv
+
+# 3. Ative o ambiente virtual
+.\.venv\Scripts\Activate.ps1
+
+# 4. Instale as dependências
+.\.venv\Scripts\pip install -r requirements.txt
+
+# 5. Inicie o servidor
 uvicorn main:app --reload
 ```
 > **Mágica dos Dados Automáticos (Seed)**: Na primeira vez que você rodar o comando acima, o sistema detectará que o banco está vazio e **gerará automaticamente mais de 100.000 registros** simulados de telemetria, clientes, alertas e usuários. Isso leva de 30 a 60 segundos. Quando aparecer `[API] [OK] Plataforma pronta!`, está tudo certo!

@@ -11,3 +11,4 @@ python-multipart
 groq
 python-dotenv
 httpx
+requests

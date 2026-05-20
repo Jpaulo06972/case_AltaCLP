@@ -2,13 +2,11 @@ fastapi
 sqlalchemy
 pydantic
 pydantic-settings
-python-jose[cryptography]
+python-jose
 passlib[bcrypt]
 bcrypt
-psycopg2-binary
 python-multipart
 groq
 python-dotenv
 httpx
 requests
-

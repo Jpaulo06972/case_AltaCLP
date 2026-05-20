@@ -1,11 +1,17 @@
 import sys
 import os
 
-# Adiciona o diretório 'backend' (que é ../backend relativo a frontend/api/)
-backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
-sys.path.insert(0, backend_path)
+# Caminho em produção na Vercel (onde Root Directory = 'frontend')
+backend_prod = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend"))
+# Caminho em desenvolvimento local (se rodar fora)
+backend_local = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
+
+if os.path.exists(os.path.join(backend_prod, "main.py")):
+    sys.path.insert(0, backend_prod)
+else:
+    sys.path.insert(0, backend_local)
 
 # Força variável VERCEL para detecção em runtime
 os.environ.setdefault("VERCEL", "1")
 
-from main import app  # noqa: E402 — FastAPI app instance (handler da Vercel)
+from main import app  # noqa: E402

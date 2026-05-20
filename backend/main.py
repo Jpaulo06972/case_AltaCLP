@@ -58,11 +58,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
-origins = os.getenv("CORS_ORIGINS", "*").split(",")
+# CORS — inclui domínio Vercel automaticamente em produção
+origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
+vercel_url = os.getenv("VERCEL_URL")
+if vercel_url:
+    origins.extend([f"https://{vercel_url}", f"https://www.{vercel_url}"])
+vercel_project = os.getenv("VERCEL_PROJECT_PRODUCTION_URL")
+if vercel_project:
+    origins.append(f"https://{vercel_project}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if os.getenv("ENVIRONMENT") == "development" else origins,
+    allow_origins=["*"] if os.getenv("ENVIRONMENT") == "development" else (origins or ["*"]),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -12,7 +12,7 @@
   },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!_backend|api).*)",
       "destination": "/index.html"
     }
   ]

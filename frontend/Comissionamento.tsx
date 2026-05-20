@@ -23,12 +23,12 @@ export default function Comissionamento() {
   const dataToShow = comissionamentos.length > 0 ? comissionamentos.map((c, i) => ({
     id: `OS-${c.id.substring(0, 4).toUpperCase()}`,
     machine: "CLP (Comissionamento)",
-    client: "Cliente da API", // A API retorna apenas cliente_id, ideal seria join, mas p/ MVP é mock
+    client: c.cliente_nome || "Cliente da API", 
     status: c.dias_atraso > 15 ? "fine" : c.dias_atraso > 0 ? "delayed" : "scheduled",
-    daysWaiting: c.dias_atraso,
+    daysWaiting: c.dias_atraso || 0,
     contractualDeadline: c.prazo_limite_cliente || "Sem prazo definido",
-    engineer: c.engenheiro_responsavel,
-    revenue: c.valor_contrato
+    engineer: c.engenheiro_responsavel || "N/A",
+    revenue: c.valor_contrato || 0
   })) : commissioningBacklog;
 
   const totalRevenue = dataToShow.reduce((sum, i) => sum + i.revenue, 0);

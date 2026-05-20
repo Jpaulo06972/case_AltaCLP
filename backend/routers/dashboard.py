@@ -43,15 +43,18 @@ def dashboard_ceo(db: Session = Depends(get_db)):
         StatusComissionamento.aguardando_dados, StatusComissionamento.em_andamento,
         StatusComissionamento.fat_pendente, StatusComissionamento.treinamento_operador,
     ]
-    backlog_total = db.query(Comissionamento).filter(
-        Comissionamento.status.in_(statuses_ativos)
-    ).count()
-    com_atraso = db.query(Comissionamento).filter(
+    backlog_total = db.query(Comissionamento).join(Maquina).filter(
         Comissionamento.status.in_(statuses_ativos),
-        Comissionamento.dias_atraso > 0
+        Maquina.id_projeto.isnot(None)
     ).count()
-    risco_cancel = db.query(Comissionamento).filter(
-        Comissionamento.risco_cancelamento == True
+    com_atraso = db.query(Comissionamento).join(Maquina).filter(
+        Comissionamento.status.in_(statuses_ativos),
+        Comissionamento.dias_atraso > 0,
+        Maquina.id_projeto.isnot(None)
+    ).count()
+    risco_cancel = db.query(Comissionamento).join(Maquina).filter(
+        Comissionamento.risco_cancelamento == True,
+        Maquina.id_projeto.isnot(None)
     ).count()
 
     # Risco Anaclara
@@ -220,12 +223,14 @@ def dashboard_engenharia(db: Session = Depends(get_db)):
         StatusComissionamento.fat_pendente, StatusComissionamento.treinamento_operador,
     ]
 
-    backlog_total = db.query(Comissionamento).filter(
-        Comissionamento.status.in_(statuses_ativos)
-    ).count()
-    com_atraso = db.query(Comissionamento).filter(
+    backlog_total = db.query(Comissionamento).join(Maquina).filter(
         Comissionamento.status.in_(statuses_ativos),
-        Comissionamento.dias_atraso > 0
+        Maquina.id_projeto.isnot(None)
+    ).count()
+    com_atraso = db.query(Comissionamento).join(Maquina).filter(
+        Comissionamento.status.in_(statuses_ativos),
+        Comissionamento.dias_atraso > 0,
+        Maquina.id_projeto.isnot(None)
     ).count()
 
     alertas_ativos = db.query(Alerta).filter(
@@ -252,7 +257,8 @@ def dashboard_engenharia(db: Session = Depends(get_db)):
     ).join(
         Cliente, Comissionamento.cliente_id == Cliente.id
     ).filter(
-        Comissionamento.status.in_(statuses_ativos)
+        Comissionamento.status.in_(statuses_ativos),
+        Maquina.id_projeto.isnot(None)
     ).order_by(
         desc(Comissionamento.risco_cancelamento),
         desc(Comissionamento.dias_atraso)

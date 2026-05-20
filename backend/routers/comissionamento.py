@@ -27,6 +27,9 @@ router = APIRouter(prefix="/comissionamentos", tags=["Comissionamento"])
 
 
 def _filtrar_projetos_acesso(query, db: Session, usuario: Usuario):
+    # Only return comissionamentos that are linked to a real project
+    query = query.filter(Maquina.id_projeto.isnot(None))
+    
     if usuario.perfil == PerfilUsuario.vendedor:
         # Vendedores só veem projetos que eles criaram (id_vendedor armazenado como string UUID)
         return query.join(Projeto, Maquina.id_projeto == Projeto.id).filter(
@@ -192,6 +195,7 @@ def risco_anaclara(db: Session = Depends(get_db)):
         Maquina, Comissionamento.maquina_id == Maquina.id
     ).filter(
         Comissionamento.cliente_id == anaclara.id,
+        Maquina.id_projeto.isnot(None),
         Comissionamento.status.in_([
             StatusComissionamento.aguardando_dados,
             StatusComissionamento.em_andamento,

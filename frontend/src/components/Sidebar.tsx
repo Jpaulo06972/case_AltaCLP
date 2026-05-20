@@ -15,6 +15,7 @@ import {
   Cpu,
   LogOut,
   ChevronDown,
+  Terminal,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
@@ -25,6 +26,7 @@ const navigation = [
   { label: "Máquinas", path: "/maquinas", icon: Cpu, roles: ["engenharia", "tecnico_campo", "ceo", "cfo"] },
   { label: "Alertas", path: "/alertas", icon: Bell, roles: ["engenharia", "tecnico_campo", "ceo", "cfo"] },
   { label: "Auditoria GitOps", path: "/gitops", icon: GitCompareArrows, roles: ["engenharia", "ceo", "cfo"] },
+  { label: "Workspace Local", path: "/workspace-tecnico", icon: Terminal, roles: ["tecnico_campo", "engenharia"] },
   { label: "Comissionamento", path: "/comissionamento", icon: Wrench, roles: ["ceo", "cfo", "engenharia", "tecnico_campo", "vendedor", "vendas"] },
   { label: "Biblioteca", path: "/biblioteca", icon: Cpu, roles: ["engenharia", "ceo", "cfo"] },
   { label: "Cotação IA", path: "/cotacao", icon: Zap, roles: ["vendas", "vendedor", "ceo", "cfo"] },

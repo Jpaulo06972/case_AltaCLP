@@ -4,7 +4,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { gitopsApi } from "@/services/api";
+import { gitopsApi, gitopsExtApi } from "@/services/api";
 import {
   GitCompareArrows,
   CheckCircle,
@@ -14,6 +14,8 @@ import {
   User,
   Clock,
   ExternalLink,
+  Github,
+  BrainCircuit,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -21,13 +23,35 @@ import { useState } from "react";
 function DiffModal({ drift, onClose }: { drift: any; onClose: () => void }) {
   const [creatingPR, setCreatingPR] = useState(false);
   const [prCreated, setPrCreated] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiReview, setAiReview] = useState<any>(null);
 
-  const handleSugerirPR = () => {
+  const handleAnaliseIA = async () => {
+    if (!drift.auditoria_id) return;
+    setAnalyzing(true);
+    try {
+      const res = await gitopsExtApi.reviewIa(drift.auditoria_id);
+      setAiReview(res.data);
+    } catch (e) {
+      console.error("Erro na análise IA:", e);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleSugerirPR = async () => {
     setCreatingPR(true);
-    setTimeout(() => {
-      setCreatingPR(false);
+    try {
+      await gitopsApi.aprovarPR(drift.auditoria_id, { 
+        aprovado_por: "Engenharia IA", 
+        comentario: aiReview ? aiReview.resumo_mudancas : "Aprovado direto." 
+      });
       setPrCreated(true);
-    }, 1500);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCreatingPR(false);
+    }
   };
 
   return (
@@ -48,34 +72,62 @@ function DiffModal({ drift, onClose }: { drift: any; onClose: () => void }) {
           </button>
         </div>
         
-        <div className="p-6 overflow-y-auto bg-apple-surface-1/50 flex-1">
-          <p className="text-[13px] font-semibold text-apple-label mb-2">Diff de Código (Gateway IoT OPC UA vs. Git Central)</p>
-          <div className="bg-[#1e1e1e] rounded-xl overflow-hidden font-mono text-[12px] leading-relaxed shadow-inner">
-            {(drift.diff_detalhe || "- T_Setpoint := 85.0;\n+ T_Setpoint := 90.0;\n  Alarm_Enable := TRUE;").split('\n').map((line: string, i: number) => {
-              const isAdded = line.startsWith('+');
-              const isRemoved = line.startsWith('-');
-              return (
-                <div key={i} className={`px-4 py-1 flex ${isAdded ? 'bg-green-500/20 text-green-300' : isRemoved ? 'bg-red-500/20 text-red-300' : 'text-gray-300'}`}>
-                  <span className="w-8 select-none opacity-50 border-r border-gray-700 mr-4 text-right pr-2">{i + 1}</span>
-                  <span className="whitespace-pre-wrap">{line}</span>
-                </div>
-              );
-            })}
+        <div className="p-6 overflow-y-auto bg-apple-surface-1/50 flex-1 flex flex-col gap-4">
+          <div>
+            <p className="text-[13px] font-semibold text-apple-label mb-2">Diff de Código (Gateway IoT OPC UA vs. Git Central)</p>
+            <div className="bg-[#1e1e1e] rounded-xl overflow-hidden font-mono text-[12px] leading-relaxed shadow-inner max-h-64 overflow-y-auto">
+              {(drift.diff_detalhe || "- T_Setpoint := 85.0;\n+ T_Setpoint := 90.0;\n  Alarm_Enable := TRUE;").split('\n').map((line: string, i: number) => {
+                const isAdded = line.startsWith('+');
+                const isRemoved = line.startsWith('-');
+                return (
+                  <div key={i} className={`px-4 py-1 flex ${isAdded ? 'bg-green-500/20 text-green-300' : isRemoved ? 'bg-red-500/20 text-red-300' : 'text-gray-300'}`}>
+                    <span className="w-8 select-none opacity-50 border-r border-gray-700 mr-4 text-right pr-2">{i + 1}</span>
+                    <span className="whitespace-pre-wrap">{line}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
+          {/* AI Review Section */}
+          {aiReview && (
+            <div className="bg-apple-blue/10 border border-apple-blue/20 rounded-xl p-4 mt-2">
+              <div className="flex items-center gap-2 mb-2">
+                <BrainCircuit size={16} className="text-apple-blue" />
+                <h4 className="text-[14px] font-semibold text-apple-blue">Análise IA Concluída</h4>
+              </div>
+              <div className="space-y-2 text-[13px]">
+                <p><strong className="text-apple-label">Resumo:</strong> <span className="text-apple-tertiary">{aiReview.resumo_mudancas}</span></p>
+                <p><strong className="text-apple-label">Risco:</strong> <span className={aiReview.riscos.includes('ALTO') ? 'text-apple-red font-medium' : 'text-apple-tertiary'}>{aiReview.riscos}</span></p>
+                <p><strong className="text-apple-label">Recomendação:</strong> <span className="text-apple-tertiary">{aiReview.recomendacao}</span></p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 border-t border-apple-separator/30 bg-apple-surface-0 flex justify-end gap-3">
           <button onClick={onClose} className="apple-btn apple-btn-secondary text-[13px] px-5 py-2">
             Cancelar
           </button>
-          <button 
-            onClick={handleSugerirPR}
-            disabled={prCreated || creatingPR}
-            className={`apple-btn text-[13px] px-5 py-2 flex items-center gap-2 ${prCreated ? 'bg-apple-green text-white border-transparent' : 'apple-btn-primary'}`}
-          >
-            {creatingPR ? <Loader2 size={16} className="animate-spin" /> : prCreated ? <CheckCircle size={16} /> : <GitCompareArrows size={16} />}
-            {prCreated ? "PR Sugerido" : creatingPR ? "Gerando PR..." : "Sugerir Pull Request"}
-          </button>
+          {!aiReview ? (
+             <button 
+               onClick={handleAnaliseIA}
+               disabled={analyzing || !drift.auditoria_id}
+               className="apple-btn apple-btn-primary text-[13px] px-5 py-2 flex items-center gap-2"
+             >
+               {analyzing ? <Loader2 size={16} className="animate-spin" /> : <BrainCircuit size={16} />}
+               {analyzing ? "Analisando..." : "Analisar com IA"}
+             </button>
+          ) : (
+            <button 
+              onClick={handleSugerirPR}
+              disabled={prCreated || creatingPR}
+              className={`apple-btn text-[13px] px-5 py-2 flex items-center gap-2 ${prCreated ? 'bg-apple-green text-white border-transparent' : 'apple-btn-primary'}`}
+            >
+              {creatingPR ? <Loader2 size={16} className="animate-spin" /> : prCreated ? <CheckCircle size={16} /> : <GitCompareArrows size={16} />}
+              {prCreated ? "Push Realizado" : creatingPR ? "Fazendo Push..." : "Aprovar e Fazer Push"}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -95,6 +147,11 @@ export default function GitOps() {
     queryFn: () => gitopsApi.getEstatisticas().then((r) => r.data),
   });
 
+  const { data: projetosData, isLoading: loadingProjetos } = useQuery({
+    queryKey: ["gitops-projetos"],
+    queryFn: () => gitopsExtApi.projetos().then((r) => r.data),
+  });
+
   if (loadingDrifts) {
     return (
       <div className="flex items-center justify-center py-32">
@@ -104,6 +161,7 @@ export default function GitOps() {
   }
 
   const driftList = drifts?.dados || drifts || [];
+  const projetosList = projetosData?.projetos || [];
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -122,6 +180,48 @@ export default function GitOps() {
             <p className={`text-[22px] font-bold tracking-tight ${s.color}`}>{s.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Meus Projetos (Git) */}
+      <div>
+        <h3 className="text-[15px] font-semibold text-apple-label mb-3 flex items-center gap-2">
+          <Github size={18} />
+          Repositórios GitHub Conectados
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {loadingProjetos ? (
+            <div className="col-span-full flex items-center justify-center py-6 text-apple-tertiary">
+              <Loader2 className="animate-spin" size={24} />
+            </div>
+          ) : projetosList.length > 0 ? (
+            projetosList.map((proj: any, idx: number) => (
+              <div key={idx} className="apple-card p-4 flex items-center justify-between group">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-apple-surface-1 flex items-center justify-center border border-apple-separator/30">
+                    <Github size={18} className="text-apple-label" />
+                  </div>
+                  <div>
+                    <h4 className="text-[14px] font-semibold text-apple-label truncate max-w-[200px]" title={proj.nome}>
+                      {proj.id_projeto}
+                    </h4>
+                    <p className="text-[12px] text-apple-tertiary truncate max-w-[200px]" title={proj.repo}>
+                      {proj.repo}
+                    </p>
+                  </div>
+                </div>
+                {proj.prs_pendentes > 0 && (
+                  <span className="bg-apple-red/10 text-apple-red text-[11px] font-bold px-2 py-1 rounded-full">
+                    {proj.prs_pendentes} drifts
+                  </span>
+                )}
+              </div>
+            ))
+          ) : (
+             <div className="col-span-full apple-card p-6 text-center text-apple-tertiary">
+                Nenhum projeto Git encontrado. Configure seu GITHUB_TOKEN no backend.
+             </div>
+          )}
+        </div>
       </div>
 
       {/* Active Drifts */}

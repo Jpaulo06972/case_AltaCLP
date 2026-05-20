@@ -262,6 +262,8 @@ export const projectsApi = {
   uploadDocument: (id: string, formData: FormData) => 
     api.post(`/projects/${id}/documents`, formData, { headers: { "Content-Type": "multipart/form-data" } }),
   submitValidation: (id: string) => api.post(`/projects/${id}/submit-validation`),
+  downloadScopeDocument: (id: string) => 
+    api.get(`/projects/${id}/scope-document/download`, { responseType: "blob" }),
 };
 
 export const overviewApi = {

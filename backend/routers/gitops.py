@@ -177,6 +177,33 @@ def aprovar_pr(
             maquina.codigo_sync = True
 
         db.commit()
+        
+        # Opcional: Efetuar push real pro Github
+        import os
+        import requests
+        import base64
+        import time
+        github_token = os.getenv("GITHUB_TOKEN")
+        
+        if github_token and maquina:
+            try:
+                headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+                r_repos = requests.get("https://api.github.com/user/repos?sort=updated&per_page=1", headers=headers)
+                if r_repos.status_code == 200 and r_repos.json():
+                    repo_full_name = r_repos.json()[0]["full_name"]
+                    
+                    content = f"PR Aprovado: {body.comentario}\nDiff:\n{auditoria.diff_detalhe or auditoria.diff_resumo}\nMáquina: {maquina.codigo}"
+                    encoded_content = base64.b64encode(content.encode()).decode()
+                    
+                    push_data = {
+                        "message": f"Hotfix(GitOps): Merge aprovado por {body.aprovado_por} para {maquina.codigo}",
+                        "content": encoded_content
+                    }
+                    filename = f"gitops_audits/audit_{maquina.codigo}_{int(time.time())}.txt"
+                    push_url = f"https://api.github.com/repos/{repo_full_name}/contents/{filename}"
+                    requests.put(push_url, headers=headers, json=push_data, timeout=5)
+            except Exception as e:
+                print(f"[GitOps] Erro Github flow: {e}")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao aprovar: {str(e)}")
@@ -219,6 +246,9 @@ def estatisticas_gitops(db: Session = Depends(get_db)):
     }
 
 
+import os
+import requests
+
 PROJETOS_GIT = [
     {"id_projeto": "plc-anaclara-l1", "nome": "Anaclara Extrusora L1", "repo": "altaclp/plc-anaclara"},
     {"id_projeto": "plc-belmare", "nome": "Belmare Dosagem", "repo": "altaclp/plc-belmare"},
@@ -229,13 +259,34 @@ PROJETOS_GIT = [
 @router.get("/projetos")
 def listar_projetos_git(db: Session = Depends(get_db)):
     """Projetos disponíveis para técnicos (read) e engenheiros (merge)."""
-    for p in PROJETOS_GIT:
+    github_token = os.getenv("GITHUB_TOKEN")
+    projetos = []
+    
+    if github_token:
+        try:
+            headers = {"Authorization": f"token {github_token}"}
+            r = requests.get("https://api.github.com/user/repos?sort=updated&per_page=10", headers=headers, timeout=5)
+            if r.status_code == 200:
+                for repo in r.json():
+                    projetos.append({
+                        "id_projeto": repo["name"],
+                        "nome": repo["full_name"],
+                        "repo": repo["full_name"]
+                    })
+        except Exception as e:
+            print(f"[GitOps] Erro ao buscar projetos GitHub: {e}")
+
+    if not projetos:
+        projetos = PROJETOS_GIT.copy()
+
+    for p in projetos:
+        busca = p['id_projeto'].split('-')[-1] if '-' in p['id_projeto'] else p['id_projeto']
         drifts = db.query(GitOpsAuditoria).join(Maquina).filter(
-            Maquina.codigo.ilike(f"%{p['id_projeto'].split('-')[1]}%"),
+            Maquina.codigo.ilike(f"%{busca}%"),
             GitOpsAuditoria.em_sync == False,
         ).count()
         p["prs_pendentes"] = drifts
-    return {"projetos": PROJETOS_GIT}
+    return {"projetos": projetos}
 
 
 @router.get("/auditoria-log")
@@ -266,22 +317,57 @@ def log_auditoria(
 
 @router.get("/review-ia/{auditoria_id}")
 async def review_ia_pr(auditoria_id: UUID, db: Session = Depends(get_db)):
-    """Análise estática IA do PR (resumo + riscos)."""
+    """Análise estática IA do PR (resumo + riscos) via Groq."""
     audit = db.query(GitOpsAuditoria).filter(GitOpsAuditoria.id == auditoria_id).first()
     if not audit:
         raise HTTPException(status_code=404, detail="Auditoria não encontrada")
-    risco = (
-        "ALTO: alteração em bloco de segurança (E-Stop) sem revisão cruzada. "
-        "Verificar intertravamento com válvula VH-118."
+        
+    diff = audit.diff_detalhe or audit.diff_resumo or "Sem detalhes de diff."
+    
+    risco_default = (
+        "ALTO: alteração em bloco de segurança (E-Stop) sem revisão cruzada. Verificar intertravamento."
         if audit.diff_linhas and audit.diff_linhas > 5
         else "MÉDIO: ajustes de setpoint dentro do esperado para comissionamento."
     )
-    resumo = audit.diff_resumo or "Alterações em lógica de sequência e timers de ciclo."
+    resumo_default = audit.diff_resumo or "Alterações em lógica de sequência e timers de ciclo."
+    recomendacao_default = "Aprovar com teste FAT documentado" if "MÉDIO" in risco_default else "Rejeitar até correção"
+
+    from services.groq_client import get_groq_client, DEFAULT_TEXT_MODEL
+    client = get_groq_client()
+    
+    if client:
+        try:
+            prompt = f"""Você é um especialista em automação industrial e PLC (Structured Text).
+Avalie este diff de código e responda ESTRITAMENTE em formato JSON com as chaves:
+"resumo": "Um parágrafo curto e direto explicando as modificações",
+"risco": "Nível de risco (ALTO, MÉDIO, BAIXO) e o motivo curto focado em segurança e impacto",
+"recomendacao": "Recomendação curta (Aprovar, Rejeitar, Testar, etc)"
+
+Diff:
+{diff}
+"""
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model=DEFAULT_TEXT_MODEL,
+                temperature=0.2,
+                response_format={"type": "json_object"}
+            )
+            import json
+            resp = json.loads(chat_completion.choices[0].message.content)
+            return {
+                "auditoria_id": str(auditoria_id),
+                "resumo_mudancas": resp.get("resumo", resumo_default),
+                "riscos": resp.get("risco", risco_default),
+                "recomendacao": resp.get("recomendacao", recomendacao_default),
+            }
+        except Exception as e:
+            print(f"[GitOps] Erro na IA: {e}")
+
     return {
         "auditoria_id": str(auditoria_id),
-        "resumo_mudancas": resumo,
-        "riscos": risco,
-        "recomendacao": "Aprovar com teste FAT documentado" if "MÉDIO" in risco else "Rejeitar até correção E-Stop",
+        "resumo_mudancas": resumo_default,
+        "riscos": risco_default,
+        "recomendacao": recomendacao_default,
     }
 
 

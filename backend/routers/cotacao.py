@@ -91,6 +91,7 @@ async def _salvar_e_retornar_cotacao(
         "valor_estimado": valor_total,
         "tempo_processamento_segundos": resultado.get("tempo_processamento_segundos"),
         "status": "gerada",
+        "cliente_nome": resultado.get("cliente_nome") or cliente_nome,
     }
 
 

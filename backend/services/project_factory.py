@@ -119,7 +119,14 @@ def create_project_from_quotation(
     db.add(comiss)
     db.flush()
 
-    for ordem, titulo in enumerate(DEFAULT_PENDENCIAS, start=1):
+    etapas = []
+    if template_comissionamento and isinstance(template_comissionamento, dict):
+        etapas = template_comissionamento.get("etapas", [])
+    
+    if not etapas:
+        etapas = DEFAULT_PENDENCIAS
+
+    for ordem, titulo in enumerate(etapas, start=1):
         db.add(
             ProjetoPendencia(
                 id=uuid.uuid4(),

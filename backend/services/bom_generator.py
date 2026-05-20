@@ -48,6 +48,12 @@ async def gerar_bom_da_transcricao(transcricao: str, vendedor: str, cliente_nome
     else:
         resultado = _gerar_heuristico(transcricao, vendedor, cliente_nome)
 
+    # Make sure cliente_nome is resolved and set
+    resolved_cliente = cliente_nome
+    if not resolved_cliente and resultado.get("parametros_extraidos"):
+        resolved_cliente = resultado["parametros_extraidos"].get("outros", {}).get("cliente", "")
+    
+    resultado["cliente_nome"] = resolved_cliente or "Cliente Geral"
     resultado["tempo_processamento_segundos"] = round(time.time() - inicio, 2)
     return resultado
 
@@ -124,10 +130,42 @@ Responda APENAS em JSON válido, sem markdown. Use esta estrutura:
 
 def _gerar_heuristico(transcricao: str, vendedor: str, cliente_nome: str = None) -> dict:
     """
-    Extração heurística local — funciona sem API key.
-    Usa keywords na transcrição para montar BOM básica.
+    Extração heurística local inteligente baseada em regras dinâmicas e regex.
+    Analisa as necessidades do cliente, extrai quantidades de componentes e
+    especificações de forma dinâmica.
     """
+    import re
     texto = transcricao.lower()
+
+    # Dynamic Client Name Extraction from transcript if not provided or default
+    detected_cliente = None
+    if not cliente_nome or cliente_nome in ("Cerâmica Branco", "Cliente Geral", "Novo Cliente", "Cliente IA"):
+        if "nutrisoja" in texto:
+            detected_cliente = "NutriSoja"
+        elif "nestlé" in texto or "nestle" in texto:
+            detected_cliente = "Nestlé"
+        elif "cerâmica branco" in texto or "ceramica branco" in texto:
+            detected_cliente = "Cerâmica Branco"
+        elif "anaclara" in texto or "ana clara" in texto:
+            detected_cliente = "AnaClara"
+        else:
+            # Let's try some regexes:
+            match = re.search(r'cliente (?:de|da|do)\s+[a-zA-Záàâãéèêíïóôõöúçñ\s]+,\s+a\s+([a-zA-Záàâãéèêíïóôõöúçñ\s0-9]+)', transcricao)
+            if match:
+                detected_cliente = match.group(1).strip()
+            else:
+                match2 = re.search(r'planta da\s+([a-zA-Záàâãéèêíïóôõöúçñ\s0-9]+)', transcricao)
+                if match2:
+                    detected_cliente = match2.group(1).strip()
+                else:
+                    match3 = re.search(r'cliente:\s*([a-zA-Záàâãéèêíïóôõöúçñ\s0-9]+)', transcricao)
+                    if match3:
+                        detected_cliente = match3.group(1).strip()
+    
+    if detected_cliente:
+        cliente_nome = detected_cliente
+    elif not cliente_nome:
+        cliente_nome = "Cliente Geral"
 
     # Detecção de tipo de equipamento
     tipo_equip = "Não identificado"
@@ -137,16 +175,17 @@ def _gerar_heuristico(transcricao: str, vendedor: str, cliente_nome: str = None)
         tipo_equip = "Tanque Misturador/Reator"
     elif any(w in texto for w in ["dosador", "dosagem", "envase"]):
         tipo_equip = "Sistema de Dosagem/Envase"
-    elif any(w in texto for w in ["prensa", "estampa"]):
+    elif any(w in texto for w in ["prensa", "estampa", "prensagem"]):
         tipo_equip = "Prensa Industrial"
     elif any(w in texto for w in ["esteira", "transportador", "conveyor"]):
         tipo_equip = "Transportador/Esteira"
     elif any(w in texto for w in ["caldeira", "boiler"]):
         tipo_equip = "Caldeira Industrial"
+    elif any(w in texto for w in ["moagem", "moinho", "moer"]):
+        tipo_equip = "Moinho Industrial"
 
     # Detecção de potência
     potencia = 15.0  # default
-    import re
     pot_match = re.search(r'(\d+)\s*(kw|kilowatt|cv|hp)', texto)
     if pot_match:
         potencia = float(pot_match.group(1))
@@ -169,7 +208,7 @@ def _gerar_heuristico(transcricao: str, vendedor: str, cliente_nome: str = None)
 
     # Detecção de setor
     setor = "industrial"
-    if any(w in texto for w in ["aliment", "comida", "food"]):
+    if any(w in texto for w in ["aliment", "comida", "food", "soja", "nutrisoja"]):
         setor = "alimentos"
     elif any(w in texto for w in ["farmac", "pharma", "medicamento", "gxp"]):
         setor = "farmacêutico"
@@ -179,6 +218,8 @@ def _gerar_heuristico(transcricao: str, vendedor: str, cliente_nome: str = None)
         setor = "químico"
     elif any(w in texto for w in ["automotiv", "autopeç"]):
         setor = "automotivo"
+    elif any(w in texto for w in ["ceram", "cerâm", "argila"]):
+        setor = "cerâmica"
 
     # Certificações
     certificacoes = []
@@ -191,63 +232,270 @@ def _gerar_heuristico(transcricao: str, vendedor: str, cliente_nome: str = None)
     if not certificacoes:
         certificacoes.append("NR-12")  # Mínimo obrigatório
 
-    # Monta BOM baseada no tipo de equipamento
+    # Helper function to find quantities dynamically in the text
+    def find_quantity(patterns, default_qty=1):
+        for pat in patterns:
+            # Matches "5 pt100", "5x pt100", "5 peças de pt100", "5 sensores pt100"
+            rx1 = rf"(\d+)\s*(?:x|unidades|unidade|peças|peça|pçs|pç|sensores|sensor|transmissores|transmissor|clps|clp)?\s*(?:de)?\s*(?:[a-zA-Záàâãéèêíïóôõöúçñ\-\s]*?){pat}"
+            m1 = re.search(rx1, texto)
+            if m1:
+                return max(1, int(m1.group(1)))
+            
+            # Matches "pt100: 5", "pt100 - 5"
+            rx2 = rf"{pat}\s*(?::|-|—)?\s*(\d+)"
+            m2 = re.search(rx2, texto)
+            if m2:
+                return max(1, int(m2.group(1)))
+                
+        # If keyword matches but no number found, return default quantity
+        if any(re.search(rf"\b{pat}\b", texto) for pat in patterns):
+            return default_qty
+        return 0
+
+    components_mapping = [
+        {
+            "codigo": "CLP-S7-1500",
+            "descricao": "CLP Siemens S7-1500",
+            "valor_unit": 14200.00,
+            "unidade": "pç",
+            "patterns": ["siemens", "s7-1500", "s7 1500"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "CLP-AB-L5K",
+            "descricao": "CLP Allen-Bradley CompactLogix L5K",
+            "valor_unit": 12500.00,
+            "unidade": "pç",
+            "patterns": ["allen", "bradley", "compactlogix", "ab l5k"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "CLP-SCH-M241",
+            "descricao": "CLP Schneider Modicon M241",
+            "valor_unit": 8900.00,
+            "unidade": "pç",
+            "patterns": ["schneider", "modicon", "m241"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "CLP-WEG-TPW04",
+            "descricao": "CLP WEG TPW-04",
+            "valor_unit": 6500.00,
+            "unidade": "pç",
+            "patterns": ["weg", "tpw", "tpw-04", "tpw04"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "SEN-TEMP-PT100",
+            "descricao": "Sensor temperatura PT100 industrial -50~400°C",
+            "valor_unit": 450.00,
+            "unidade": "pç",
+            "patterns": ["pt100", "sensor de temperatura", "sensor temperatura", "sensores de temperatura", "sensores temperatura", "temperatura", "molde"],
+            "default_qty": 4
+        },
+        {
+            "codigo": "SEN-PRESS-4-20",
+            "descricao": "Transmissor pressão 4-20mA 0-10 bar",
+            "valor_unit": 1200.00,
+            "unidade": "pç",
+            "patterns": ["pressão", "pressao", "transmissor de pressão", "transmissor pressão", "transmissores de pressão", "bar", "transdutor"],
+            "default_qty": 2
+        },
+        {
+            "codigo": "SEN-VIB-ICP",
+            "descricao": "Acelerômetro ICP vibração industrial",
+            "valor_unit": 2800.00,
+            "unidade": "pç",
+            "patterns": ["vibração", "vibraçao", "acelerometro", "acelerômetro", "icp"],
+            "default_qty": 2
+        },
+        {
+            "codigo": "SEN-CORR-TC",
+            "descricao": "Transformador de corrente TC split-core",
+            "valor_unit": 380.00,
+            "unidade": "pç",
+            "patterns": ["corrente", "tc", "split-core", "tc split"],
+            "default_qty": 3
+        },
+        {
+            "codigo": "MOD-OPCUA-GW",
+            "descricao": "Gateway OPC UA Industrial",
+            "valor_unit": 3500.00,
+            "unidade": "pç",
+            "patterns": ["opc", "opcua", "opc-ua", "opc ua"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "MOD-MODBUS-ETH",
+            "descricao": "Módulo comunicação Modbus TCP/Ethernet",
+            "valor_unit": 1800.00,
+            "unidade": "pç",
+            "patterns": ["modbus", "modulo modbus", "módulo modbus"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "IHM-7POL",
+            "descricao": "IHM 7 polegadas touchscreen industrial",
+            "valor_unit": 4200.00,
+            "unidade": "pç",
+            "patterns": ["ihm", "touchscreen", "tela", "touch"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "PAI-CMD-24P",
+            "descricao": "Painel de comando 24 pontos IP65",
+            "valor_unit": 7500.00,
+            "unidade": "pç",
+            "patterns": ["painel de comando", "painel de controle", "painel", "ip65"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "CAB-IND-100M",
+            "descricao": "Cabo industrial blindado 100m",
+            "valor_unit": 1200.00,
+            "unidade": "rolo",
+            "patterns": ["cabo blindado", "cabo", "cabos blindados", "blindado"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "FONT-24VDC",
+            "descricao": "Fonte alimentação 24VDC 10A industrial",
+            "valor_unit": 650.00,
+            "unidade": "pç",
+            "patterns": ["fonte alimentacao", "fonte alimentação", "fonte 24v", "fonte 24vdc", "fonte"],
+            "default_qty": 2
+        },
+        {
+            "codigo": "REL-SEG-NR12",
+            "descricao": "Relé de segurança NR-12 Cat.4",
+            "valor_unit": 1400.00,
+            "unidade": "pç",
+            "patterns": ["rele de seguranca", "relé de segurança", "rele de seg", "nr12", "nr-12", "segurança", "seguranca"],
+            "default_qty": 2
+        },
+        {
+            "codigo": "SW-IND-8P",
+            "descricao": "Switch industrial 8 portas Ethernet",
+            "valor_unit": 2200.00,
+            "unidade": "pç",
+            "patterns": ["switch", "switch industrial", "switch ethernet"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "INV-FREQ-30KW",
+            "descricao": "Inversor de frequência 30kW 380V",
+            "valor_unit": 9200.00,
+            "unidade": "pç",
+            "patterns": ["inversor 30kw", "inversor.*30.*kw", "30kw"],
+            "default_qty": 1
+        },
+        {
+            "codigo": "INV-FREQ-15KW",
+            "descricao": "Inversor de frequência 15kW 380V",
+            "valor_unit": 5800.00,
+            "unidade": "pç",
+            "patterns": ["inversor 15kw", "inversor.*15.*kw", "15kw", "inversor", "motores", "motor"],
+            "default_qty": 1
+        }
+    ]
+
     bom = []
-    # CLP — escolhe baseado na complexidade
-    if potencia > 20:
-        bom.append({"codigo": "CLP-AB-L5K", "descricao": "CLP Allen-Bradley CompactLogix L5K", "quantidade": 1, "unidade": "pç", "valor_unit": 12500.00})
-    else:
-        bom.append({"codigo": "CLP-WEG-TPW04", "descricao": "CLP WEG TPW-04", "quantidade": 1, "unidade": "pç", "valor_unit": 6500.00})
+    for comp in components_mapping:
+        qty = find_quantity(comp["patterns"], comp["default_qty"])
+        if qty > 0:
+            # Evitar duplicar inversores se ambos casarem
+            if comp["codigo"] == "INV-FREQ-15KW" and any(x["codigo"] == "INV-FREQ-30KW" for x in bom):
+                continue
+            # Evitar duplicar CLPs se mais de um casar
+            if comp["codigo"].startswith("CLP-") and any(x["codigo"].startswith("CLP-") for x in bom):
+                continue
+            # Evitar duplicar módulos de comunicação
+            if comp["codigo"].startswith("MOD-") and any(x["codigo"].startswith("MOD-") for x in bom):
+                continue
+            
+            bom.append({
+                "codigo": comp["codigo"],
+                "descricao": comp["descricao"],
+                "quantidade": qty,
+                "unidade": comp["unidade"],
+                "valor_unit": comp["valor_unit"]
+            })
 
-    # Sensores padrão
-    bom.append({"codigo": "SEN-TEMP-PT100", "descricao": "Sensor temperatura PT100 industrial -50~400°C", "quantidade": 4, "unidade": "pç", "valor_unit": 450.00})
-    bom.append({"codigo": "SEN-PRESS-4-20", "descricao": "Transmissor pressão 4-20mA 0-10 bar", "quantidade": 2, "unidade": "pç", "valor_unit": 1200.00})
-    bom.append({"codigo": "SEN-VIB-ICP", "descricao": "Acelerômetro ICP vibração industrial", "quantidade": 2, "unidade": "pç", "valor_unit": 2800.00})
-    bom.append({"codigo": "SEN-CORR-TC", "descricao": "Transformador de corrente TC split-core", "quantidade": 3, "unidade": "pç", "valor_unit": 380.00})
+    # Fallback caso nada seja detectado no texto
+    if not bom:
+        if potencia > 20:
+            bom.append({"codigo": "CLP-AB-L5K", "descricao": "CLP Allen-Bradley CompactLogix L5K", "quantidade": 1, "unidade": "pç", "valor_unit": 12500.00})
+        else:
+            bom.append({"codigo": "CLP-WEG-TPW04", "descricao": "CLP WEG TPW-04", "quantidade": 1, "unidade": "pç", "valor_unit": 6500.00})
+        
+        bom.append({"codigo": "SEN-TEMP-PT100", "descricao": "Sensor temperatura PT100 industrial -50~400°C", "quantidade": 4, "unidade": "pç", "valor_unit": 450.00})
+        bom.append({"codigo": "SEN-PRESS-4-20", "descricao": "Transmissor pressão 4-20mA 0-10 bar", "quantidade": 2, "unidade": "pç", "valor_unit": 1200.00})
+        bom.append({"codigo": "SEN-VIB-ICP", "descricao": "Acelerômetro ICP vibração industrial", "quantidade": 2, "unidade": "pç", "valor_unit": 2800.00})
+        bom.append({"codigo": "SEN-CORR-TC", "descricao": "Transformador de corrente TC split-core", "quantidade": 3, "unidade": "pç", "valor_unit": 380.00})
+        
+        if protocolo == "OPC UA":
+            bom.append({"codigo": "MOD-OPCUA-GW", "descricao": "Gateway OPC UA Industrial", "quantidade": 1, "unidade": "pç", "valor_unit": 3500.00})
+        else:
+            bom.append({"codigo": "MOD-MODBUS-ETH", "descricao": "Módulo comunicação Modbus TCP/Ethernet", "quantidade": 1, "unidade": "pç", "valor_unit": 1800.00})
+            
+        bom.append({"codigo": "IHM-7POL", "descricao": "IHM 7 polegadas touchscreen industrial", "quantidade": 1, "unidade": "pç", "valor_unit": 4200.00})
+        bom.append({"codigo": "PAI-CMD-24P", "descricao": "Painel de comando 24 pontos IP65", "quantidade": 1, "unidade": "pç", "valor_unit": 7500.00})
+        bom.append({"codigo": "FONT-24VDC", "descricao": "Fonte alimentação 24VDC 10A industrial", "quantidade": 2, "unidade": "pç", "valor_unit": 650.00})
+        bom.append({"codigo": "CAB-IND-100M", "descricao": "Cabo industrial blindado 100m", "quantidade": 1, "unidade": "rolo", "valor_unit": 1200.00})
+        bom.append({"codigo": "SW-IND-8P", "descricao": "Switch industrial 8 portas Ethernet", "quantidade": 1, "unidade": "pç", "valor_unit": 2200.00})
+        
+        if "NR-12" in certificacoes:
+            bom.append({"codigo": "REL-SEG-NR12", "descricao": "Relé de segurança NR-12 Cat.4", "quantidade": 2, "unidade": "pç", "valor_unit": 1400.00})
+        if potencia > 10:
+            inv = "INV-FREQ-30KW" if potencia > 20 else "INV-FREQ-15KW"
+            bom.append({"codigo": inv, "descricao": "Inversor de frequência 30kW 380V" if potencia > 20 else "Inversor de frequência 15kW 380V", "quantidade": 1, "unidade": "pç", "valor_unit": 9200.00 if potencia > 20 else 5800.00})
 
-    # Comunicação
-    if protocolo == "OPC UA":
-        bom.append({"codigo": "MOD-OPCUA-GW", "descricao": "Gateway OPC UA Industrial", "quantidade": 1, "unidade": "pç", "valor_unit": 3500.00})
-    else:
-        bom.append({"codigo": "MOD-MODBUS-ETH", "descricao": "Módulo comunicação Modbus TCP/Ethernet", "quantidade": 1, "unidade": "pç", "valor_unit": 1800.00})
-
-    # Infraestrutura comum
-    bom.append({"codigo": "IHM-7POL", "descricao": "IHM 7 polegadas touchscreen industrial", "quantidade": 1, "unidade": "pç", "valor_unit": 4200.00})
-    bom.append({"codigo": "PAI-CMD-24P", "descricao": "Painel de comando 24 pontos IP65", "quantidade": 1, "unidade": "pç", "valor_unit": 7500.00})
-    bom.append({"codigo": "FONT-24VDC", "descricao": "Fonte alimentação 24VDC 10A industrial", "quantidade": 2, "unidade": "pç", "valor_unit": 650.00})
-    bom.append({"codigo": "CAB-IND-100M", "descricao": "Cabo industrial blindado 100m", "quantidade": 1, "unidade": "rolo", "valor_unit": 1200.00})
-    bom.append({"codigo": "SW-IND-8P", "descricao": "Switch industrial 8 portas Ethernet", "quantidade": 1, "unidade": "pç", "valor_unit": 2200.00})
-
-    if "NR-12" in certificacoes:
-        bom.append({"codigo": "REL-SEG-NR12", "descricao": "Relé de segurança NR-12 Cat.4", "quantidade": 2, "unidade": "pç", "valor_unit": 1400.00})
-
-    # Inversor se há motor
-    if potencia > 10:
-        inv = "INV-FREQ-30KW" if potencia > 20 else "INV-FREQ-15KW"
-        inv_item = [c for c in CATALOGO_COMPONENTES if c["codigo"] == inv][0]
-        bom.append({"codigo": inv, "descricao": inv_item["descricao"], "quantidade": 1, "unidade": "pç", "valor_unit": inv_item["valor_unit"]})
-
-    # Template comissionamento
+    # Template comissionamento dinâmico
     dias_base = 6
     if setor == "farmacêutico":
-        dias_base = 13  # GxP requer validação extra
+        dias_base = 13
     elif setor == "químico":
         dias_base = 8
 
+    etapas = [
+        "1. Inspeção física do painel e cabeamento",
+        "2. Verificação de alimentação elétrica",
+    ]
+    
+    clp_item = next((x for x in bom if x["codigo"].startswith("CLP-")), None)
+    if clp_item:
+        etapas.append(f"3. Download do programa no {clp_item['descricao']}")
+        etapas.append("4. Teste de I/O (entradas e saídas) ponto a ponto")
+    else:
+        etapas.append("3. Download do programa no CLP")
+        etapas.append("4. Teste de I/O (entradas e saídas) ponto a ponto")
+        
+    gw_item = next((x for x in bom if x["codigo"].startswith("MOD-")), None)
+    if gw_item:
+        etapas.append(f"5. Configuração de comunicação ({'OPC UA' if 'OPCUA' in gw_item['codigo'] else 'Modbus TCP'})")
+    else:
+        etapas.append(f"5. Configuração de comunicação ({protocolo})")
+        
+    sensor_items = [x for x in bom if x["codigo"].startswith("SEN-")]
+    if sensor_items:
+        etapas.append(f"6. Calibração de sensores em campo ({', '.join(x['descricao'].split()[0] for x in sensor_items)})")
+    else:
+        etapas.append("6. Calibração de sensores em campo")
+        
+    etapas.extend([
+        "7. Teste funcional em modo manual",
+        "8. Teste funcional em modo automático",
+        "9. Ajuste de parâmetros e setpoints",
+        "10. Treinamento do operador",
+        "11. Documentação e entrega final",
+    ])
+    
+    if setor == "farmacêutico":
+        etapas.insert(8, "8.1. Protocolo de validação IQ/OQ/PQ (ANVISA)")
+        etapas.append("12. Emissão de certificado de validação GxP")
+
     template = {
-        "etapas": [
-            "1. Inspeção física do painel e cabeamento",
-            "2. Verificação de alimentação elétrica",
-            "3. Download do programa no CLP",
-            "4. Teste de I/O (entradas e saídas) ponto a ponto",
-            "5. Configuração de comunicação (Modbus/OPC UA)",
-            "6. Calibração de sensores em campo",
-            "7. Teste funcional em modo manual",
-            "8. Teste funcional em modo automático",
-            "9. Ajuste de parâmetros e setpoints",
-            "10. Treinamento do operador",
-            "11. Documentação e entrega final",
-        ],
+        "etapas": etapas,
         "dias_estimados": dias_base,
         "engenheiro_sugerido": "Cláudia Santarém" if setor == "farmacêutico" else "A definir",
         "riscos": [
@@ -257,10 +505,6 @@ def _gerar_heuristico(transcricao: str, vendedor: str, cliente_nome: str = None)
             "Necessidade de treinamento adicional para operadores",
         ]
     }
-
-    if setor == "farmacêutico":
-        template["etapas"].insert(8, "8.1. Protocolo de validação IQ/OQ/PQ (ANVISA)")
-        template["etapas"].append("12. Emissão de certificado de validação GxP")
 
     return {
         "parametros_extraidos": {
@@ -273,7 +517,7 @@ def _gerar_heuristico(transcricao: str, vendedor: str, cliente_nome: str = None)
             "outros": {
                 "vendedor": vendedor,
                 "cliente": cliente_nome,
-                "metodo_extracao": "heurístico (sem API key)",
+                "metodo_extracao": "heurístico dinâmico",
             }
         },
         "bom": bom,

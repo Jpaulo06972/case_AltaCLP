@@ -116,13 +116,13 @@ export default function Comissionamento() {
 
   if (loadingKanban) {
     return (
-      <motionlessLoader />
+      <MotionlessLoader />
     );
   }
 
   if (kanbanError) {
     return (
-      <motionlessError refetch={refetch} />
+      <MotionlessError refetch={refetch} />
     );
   }
 
@@ -137,7 +137,7 @@ export default function Comissionamento() {
   ];
 
   return (
-    <motionlessContent
+    <MotionlessContent
       isTecnico={isTecnico}
       anaclara={anaclara}
       columns={columns}
@@ -152,28 +152,28 @@ export default function Comissionamento() {
   );
 }
 
-function motionlessLoader() {
+function MotionlessLoader() {
   return (
-    <motionlessLoaderInner />
+    <MotionlessLoaderInner />
   );
 }
 
-function motionlessLoaderInner() {
+function MotionlessLoaderInner() {
   return (
-    <motionlessLoaderBlock />
+    <MotionlessLoaderBlock />
   );
 }
 
-function motionlessLoaderBlock() {
+function MotionlessLoaderBlock() {
   return (
     <div className="flex flex-col items-center justify-center py-32 gap-4">
       <Loader2 className="animate-spin text-apple-blue" size={36} />
       <p className="text-[14px] text-apple-tertiary">Carregando painel de comissionamento…</p>
-    </motionlessLoaderBlock>
+    </div>
   );
 }
 
-function motionlessError({ refetch }: { refetch: () => void }) {
+function MotionlessError({ refetch }: { refetch: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-32 gap-4">
       <AlertTriangle size={36} className="text-apple-red" />
@@ -190,7 +190,7 @@ function motionlessError({ refetch }: { refetch: () => void }) {
   );
 }
 
-function motionlessContent(props: {
+function MotionlessContent(props: {
   isTecnico: boolean;
   anaclara: any;
   columns: { key: string; label: string; color: string }[];
@@ -216,7 +216,7 @@ function motionlessContent(props: {
   } = props;
 
   return (
-    <motionlessContentInner
+    <MotionlessContentInner
       isTecnico={isTecnico}
       anaclara={anaclara}
       columns={columns}
@@ -231,7 +231,7 @@ function motionlessContent(props: {
   );
 }
 
-function motionlessContentInner(props: {
+function MotionlessContentInner(props: {
   isTecnico: boolean;
   anaclara: any;
   columns: { key: string; label: string; color: string }[];
@@ -265,10 +265,10 @@ function motionlessContentInner(props: {
       )}
 
       {anaclara && !isTecnico && (
-        <motionlessAnaclara anaclara={anaclara} />
+        <MotionlessAnaclara anaclara={anaclara} />
       )}
 
-      <motionlessKanban
+      <MotionlessKanban
         columns={columns}
         kanbanData={kanbanData}
         handleClick={handleClick}
@@ -281,11 +281,11 @@ function motionlessContentInner(props: {
       {projetoAberto && (
         <TecnicoProjetoDrawer projetoId={projetoAberto} onClose={() => setProjetoAberto(null)} />
       )}
-    </motionlessContentInner>
+    </div>
   );
 }
 
-function motionlessAnaclara({ anaclara }: { anaclara: any }) {
+function MotionlessAnaclara({ anaclara }: { anaclara: any }) {
   return (
     <div className="apple-card p-5 border-l-4 border-apple-red">
       <div className="flex items-center gap-3 mb-2">
@@ -301,7 +301,7 @@ function motionlessAnaclara({ anaclara }: { anaclara: any }) {
   );
 }
 
-function motionlessKanban(props: {
+function MotionlessKanban(props: {
   columns: { key: string; label: string; color: string }[];
   kanbanData: Record<string, unknown[]>;
   handleClick: (item: any) => void;
@@ -320,7 +320,7 @@ function motionlessKanban(props: {
         return (
           <div key={col.key} className="space-y-2">
             <div className="flex items-center justify-between px-1 mb-1">
-              <motionlessColHeader col={col} />
+              <MotionlessColHeader col={col} />
               <span className="text-[12px] font-semibold text-apple-tertiary bg-apple-surface-2 px-2 py-0.5 rounded-full">
                 {items.length}
               </span>
@@ -351,7 +351,7 @@ function motionlessKanban(props: {
                     {item.cliente_nome ?? "—"}
                   </p>
 
-                  <motionlessCardMeta item={item} />
+                  <MotionlessCardMeta item={item} />
                 </button>
               ))}
 
@@ -368,26 +368,26 @@ function motionlessKanban(props: {
   );
 }
 
-function motionlessColHeader({ col }: { col: { label: string; color: string } }) {
+function MotionlessColHeader({ col }: { col: { label: string; color: string } }) {
   return (
     <div className="flex items-center gap-2">
-      <motionlessDot color={col.color} />
+      <MotionlessDot color={col.color} />
       <span className="text-[13px] font-semibold text-apple-label">{col.label}</span>
     </div>
   );
 }
 
-function motionlessDot({ color }: { color: string }) {
-  return <motionlessDotInner color={color} />;
+function MotionlessDot({ color }: { color: string }) {
+  return <MotionlessDotInner color={color} />;
 }
 
-function motionlessDotInner({ color }: { color: string }) {
+function MotionlessDotInner({ color }: { color: string }) {
   return (
     <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
   );
 }
 
-function motionlessCardMeta({ item }: { item: any }) {
+function MotionlessCardMeta({ item }: { item: any }) {
   return (
     <div className="space-y-1.5 text-[11px]">
       {item.engenheiro_responsavel && (
@@ -397,7 +397,7 @@ function motionlessCardMeta({ item }: { item: any }) {
         </div>
       )}
       {(item.dias_atraso ?? 0) > 0 && (
-        <motionlessAtraso dias={item.dias_atraso} />
+        <MotionlessAtraso dias={item.dias_atraso} />
       )}
       {item.valor_contrato != null && (
         <div className="flex items-center gap-1.5 text-apple-secondary">
@@ -409,7 +409,7 @@ function motionlessCardMeta({ item }: { item: any }) {
   );
 }
 
-function motionlessAtraso({ dias }: { dias: number }) {
+function MotionlessAtraso({ dias }: { dias: number }) {
   return (
     <div className="flex items-center gap-1.5 text-apple-red font-semibold">
       <Clock size={11} />

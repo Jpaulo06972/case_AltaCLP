@@ -20,6 +20,7 @@ import Comissionamento from "@/pages/Comissionamento";
 import Cotacao from "@/pages/Cotacao";
 import ROI from "@/pages/ROI";
 import BibliotecaEquipamentos from "@/pages/BibliotecaEquipamentos";
+import WorkspaceTecnico from "@/pages/WorkspaceTecnico";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,6 +52,7 @@ export default function App() {
                   <Route path="/cotacao" element={<ProtectedRoute allowedRoles={["vendas", "vendedor", "ceo", "cfo"]}><Cotacao /></ProtectedRoute>} />
                   <Route path="/biblioteca" element={<ProtectedRoute allowedRoles={["engenharia", "tecnico_campo", "ceo", "cfo"]}><BibliotecaEquipamentos /></ProtectedRoute>} />
                   <Route path="/roi" element={<ProtectedRoute allowedRoles={["ceo", "cfo"]}><ROI /></ProtectedRoute>} />
+                  <Route path="/workspace-tecnico" element={<ProtectedRoute allowedRoles={["tecnico_campo", "engenharia"]}><WorkspaceTecnico /></ProtectedRoute>} />
                 </Route>
               </Routes>
             </BrowserRouter>

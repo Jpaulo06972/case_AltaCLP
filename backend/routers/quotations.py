@@ -16,6 +16,7 @@ from middleware.rbac import require_roles
 from routers.auth import get_usuario_atual
 from services.project_factory import create_project_from_quotation
 from services.notificacoes_ws import notification_hub
+from services.bom_generator import gerar_bom_da_transcricao
 
 router = APIRouter(prefix="/quotations", tags=["Quotations"])
 
@@ -52,7 +53,7 @@ def _draft_to_dict(d: CotacaoDraft) -> dict:
 
 
 @router.post("/draft")
-def create_draft(
+async def create_draft(
     body: DraftCreateRequest,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(_quotation_roles),
@@ -67,10 +68,43 @@ def create_draft(
 
     try:
         proposta = dict(body.json_proposta_ia or {})
-        if body.cliente_nome:
-            proposta["cliente_nome"] = body.cliente_nome
-        if body.valor_estimado:
-            proposta["valor_estimado"] = body.valor_estimado
+
+        # Immediate AI Analysis if transcrito text is provided
+        if body.texto_transcrito:
+            print(f"[AI ANALYSIS] Triggering immediate analysis for text length: {len(body.texto_transcrito)}")
+            try:
+                cliente_nome = body.cliente_nome or proposta.get("cliente_nome", "")
+                resultado = await gerar_bom_da_transcricao(
+                    transcricao=body.texto_transcrito,
+                    vendedor=usuario.nome,
+                    cliente_nome=cliente_nome
+                )
+                # Save results to json_proposta_ia
+                proposta["bom"] = resultado.get("bom", [])
+                proposta["template_comissionamento"] = resultado.get("template_comissionamento", {})
+                proposta["parametros_extraidos"] = resultado.get("parametros_extraidos", {})
+
+                # Calculate valor_estimado from the BOM items
+                valor_total = sum(item.get("valor_unit", 0) * item.get("quantidade", 1) for item in proposta["bom"])
+                proposta["valor_estimado"] = valor_total if valor_total > 0 else (body.valor_estimado or 0.0)
+
+                if not cliente_nome:
+                    cliente_nome = resultado.get("parametros_extraidos", {}).get("outros", {}).get("cliente", "")
+
+                if cliente_nome:
+                    proposta["cliente_nome"] = cliente_nome
+
+            except Exception as ai_err:
+                print(f"[AI ANALYSIS ERROR] {ai_err}")
+                if body.cliente_nome:
+                    proposta["cliente_nome"] = body.cliente_nome
+                if body.valor_estimado:
+                    proposta["valor_estimado"] = body.valor_estimado
+        else:
+            if body.cliente_nome:
+                proposta["cliente_nome"] = body.cliente_nome
+            if body.valor_estimado:
+                proposta["valor_estimado"] = body.valor_estimado
 
         draft = CotacaoDraft(
             id_cotacao=uuid.uuid4(),
@@ -122,9 +156,13 @@ async def approve_draft(
 
     cliente_nome = ""
     valor = 0.0
+    bom_json = None
+    template_comiss = None
     if isinstance(draft.json_proposta_ia, dict):
         cliente_nome = draft.json_proposta_ia.get("cliente_nome", "") or ""
         valor = float(draft.json_proposta_ia.get("valor_estimado", 0) or 0)
+        bom_json = draft.json_proposta_ia.get("bom", None)
+        template_comiss = draft.json_proposta_ia.get("template_comissionamento", None)
 
     try:
         draft.status = "APROVADO"
@@ -137,6 +175,8 @@ async def approve_draft(
             valor_estimado=valor,
             texto_transcrito=draft.texto_transcrito or "",
             json_proposta_ia=draft.json_proposta_ia,
+            bom_json=bom_json,
+            template_comissionamento=template_comiss,
             prazo=body.prazo if body else None,
         )
         db.commit()

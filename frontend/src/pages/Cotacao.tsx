@@ -76,8 +76,28 @@ export default function Cotacao() {
     setLoading(true);
     setStep("processing");
     const vendedorNome = user?.nome || "Vendedor";
-    const clienteNome = "Cerâmica Branco";
     const transcricao = manualText.trim() || mockTranscription;
+
+    // Dynamically extract client name from the transcription text
+    let clienteNome = "";
+    const textoParaAnalise = transcricao.toLowerCase();
+    if (textoParaAnalise.includes("nutrisoja")) {
+      clienteNome = "NutriSoja";
+    } else if (textoParaAnalise.includes("nestle") || textoParaAnalise.includes("nestlé")) {
+      clienteNome = "Nestlé";
+    } else if (textoParaAnalise.includes("cerâmica branco") || textoParaAnalise.includes("ceramica branco")) {
+      clienteNome = "Cerâmica Branco";
+    } else if (textoParaAnalise.includes("anaclara") || textoParaAnalise.includes("ana clara")) {
+      clienteNome = "AnaClara";
+    } else {
+      const match = transcricao.match(/(?:cliente|planta)\s+(?:de|da|do)?\s*([A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+)*)/);
+      if (match && match[1]) {
+        clienteNome = match[1];
+      }
+    }
+    if (!clienteNome) {
+      clienteNome = "Cliente Geral";
+    }
 
     try {
       let res;
@@ -105,16 +125,19 @@ export default function Cotacao() {
         0
       );
 
+      const finalClienteNome = data.cliente_nome || clienteNome;
+
       console.log("[2b] FRONTEND: POST /api/quotations/draft");
       const draftRes = await quotationsApi.saveDraft({
         texto_transcrito: data.transcricao_gerada || transcricao,
         json_proposta_ia: {
-          cliente_nome: clienteNome,
+          cliente_nome: finalClienteNome,
           valor_estimado: valorTotal,
           bom: data.bom,
           parametros: data.parametros_extraidos,
+          template_comissionamento: data.template_comissionamento,
         },
-        cliente_nome: clienteNome,
+        cliente_nome: finalClienteNome,
         valor_estimado: valorTotal,
       });
       const draftId = draftRes.data.id_cotacao;
@@ -123,11 +146,10 @@ export default function Cotacao() {
 
       if (data.template_comissionamento || data.bom) {
         setProposalText(
-          proposalText ||
-            `[Escopo Técnico — ${clienteNome}]\n\n` +
-              (data.bom || [])
-                .map((i: any) => `- ${i.quantidade}x ${i.descricao}`)
-                .join("\n")
+          `[Escopo Técnico — ${finalClienteNome}]\n\n` +
+            (data.bom || [])
+              .map((i: any) => `- ${i.quantidade}x ${i.descricao}`)
+              .join("\n")
         );
       }
       setStep("done");
@@ -313,7 +335,7 @@ export default function Cotacao() {
                 </div>
                 
                 <button 
-                  onClick={() => { setStep("upload"); setFile(null); setResult(null); }}
+                  onClick={() => { setStep("upload"); setFile(null); setResult(null); setProposalText(""); }}
                   className="mt-4 apple-btn apple-btn-secondary text-[12px] w-full"
                 >
                   Processar Novo Áudio

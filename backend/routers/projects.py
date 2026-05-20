@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -27,6 +27,8 @@ from database.models import (
     PerfilUsuario,
     StatusTarefaPendencia,
     Usuario,
+    StatusComissionamento,
+    FaseProjeto,
 )
 from routers.auth import get_usuario_atual
 from services.notificacoes_ws import notification_hub
@@ -76,6 +78,20 @@ def _serialize_project(db: Session, p: Projeto) -> dict:
     alert_count = db.query(Alerta).filter(Alerta.maquina_id.in_(proj_machine_ids)).count()
     pr_count = db.query(LogAuditoriaGit).filter(LogAuditoriaGit.id_projeto == p.id).count()
 
+    comiss = (
+        db.query(Comissionamento)
+        .join(Maquina, Comissionamento.maquina_id == Maquina.id)
+        .filter(Maquina.id_projeto == p.id)
+        .first()
+    )
+
+    bom_json = comiss.bom_json if (comiss and comiss.bom_json) else []
+    checklist_json = comiss.checklist_json if (comiss and comiss.checklist_json) else {}
+    fase_projeto = comiss.fase_projeto.value if (comiss and comiss.fase_projeto) else None
+    comiss_status = None
+    if comiss and comiss.status:
+        comiss_status = comiss.status.value if hasattr(comiss.status, "value") else str(comiss.status)
+
     return {
         "id": p.id,
         "nome_contrato": p.nome_contrato,
@@ -89,6 +105,10 @@ def _serialize_project(db: Session, p: Projeto) -> dict:
         "progresso": progresso,
         "alert_count": alert_count,
         "pr_count": pr_count,
+        "bom_json": bom_json,
+        "checklist_json": checklist_json,
+        "fase_projeto": fase_projeto,
+        "comiss_status": comiss_status,
     }
 
 
@@ -139,6 +159,7 @@ def get_project_machines(id: str, db: Session = Depends(get_db), usuario: Usuari
         raise HTTPException(status_code=404, detail="Project not found")
     machines = db.query(Maquina).filter(Maquina.id_projeto == id).all()
     return [{
+        "id": str(m.id),
         "codigo": m.codigo,
         "nome": m.nome,
         "status": m.status.value,
@@ -270,8 +291,122 @@ def get_project_docs(id: str, db: Session = Depends(get_db), usuario: Usuario = 
     return [{
         "id": str(d.id),
         "nome_arquivo": d.nome_arquivo,
+        "url_documento": d.url_documento,
         "data": d.data_upload.isoformat() if d.data_upload else None,
     } for d in docs]
+
+
+@router.get("/{id}/scope-document/download")
+def download_scope_document(
+    id: str,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    projeto = _projects_query(db, usuario).filter(Projeto.id == id).first()
+    if not projeto:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    comiss = (
+        db.query(Comissionamento)
+        .join(Maquina, Comissionamento.maquina_id == Maquina.id)
+        .filter(Maquina.id_projeto == id)
+        .first()
+    )
+
+    maquina = db.query(Maquina).filter(Maquina.id_projeto == id).first()
+
+    # Generate document content
+    cliente_nome = projeto.nome_contrato or "Cliente Geral"
+    valor_contrato = float(projeto.valor_contrato) if projeto.valor_contrato else 0.0
+    status = projeto.status
+    prazo = projeto.prazo.isoformat() if projeto.prazo else "Não informado"
+    risco = projeto.risco or "BAIXO"
+
+    maquina_codigo = maquina.codigo if maquina else "CLP-DESCONHECIDO"
+    maquina_nome = maquina.nome if maquina else "Linha de Produção"
+    modelo_clp = maquina.modelo_clp.value if maquina and maquina.modelo_clp else "Não informado"
+    protocolo = maquina.protocolo.value if maquina and maquina.protocolo else "Não informado"
+
+    # BOM list
+    bom_list = []
+    total_bom = 0.0
+    if comiss and comiss.bom_json:
+        bom_list = comiss.bom_json if isinstance(comiss.bom_json, list) else []
+    
+    bom_rows = ""
+    for item in bom_list:
+        codigo = item.get("codigo", "—")
+        desc_item = item.get("descricao", "—")
+        qtd = item.get("quantidade", 1)
+        un = item.get("unidade", "pç")
+        val_u = float(item.get("valor_unit", 0))
+        val_t = val_u * qtd
+        total_bom += val_t
+        bom_rows += f"| {codigo} | {desc_item} | {qtd} | {un} | R$ {val_u:,.2f} | R$ {val_t:,.2f} |\n"
+
+    if not bom_rows:
+        bom_rows = "| — | Nenhum item no BOM | — | — | R$ 0,00 | R$ 0,00 |\n"
+
+    # Checklist / Stages
+    etapas_str = ""
+    riscos_str = ""
+    dias_est = 0
+    eng_sug = "Não informado"
+    
+    if comiss and comiss.checklist_json:
+        checklist = comiss.checklist_json if isinstance(comiss.checklist_json, dict) else {}
+        etapas = checklist.get("etapas", [])
+        for i, etapa in enumerate(etapas, 1):
+            etapas_str += f"{i}. {etapa}\n"
+        
+        riscos = checklist.get("riscos", [])
+        for r in riscos:
+            riscos_str += f"- {r}\n"
+            
+        dias_est = checklist.get("dias_estimados", 0)
+        eng_sug = checklist.get("engenheiro_sugerido", "Engenharia AltaCLP")
+
+    if not etapas_str:
+        # Fallback if empty
+        etapas_str = "1. Inspeção física do painel\n2. Teste funcional de I/O\n3. Entrega técnica\n"
+    if not riscos_str:
+        riscos_str = "- Nenhum risco crítico identificado\n"
+
+    doc = f"""# ESCOPO TÉCNICO DE COMISSIONAMENTO — {cliente_nome}
+
+## 1. Informações Gerais do Projeto
+- **ID do Projeto:** {id}
+- **Contrato/Cliente:** {cliente_nome}
+- **Valor Contratual:** R$ {valor_contrato:,.2f}
+- **Status Atual:** {status}
+- **Prazo Estimado:** {prazo}
+- **Risco:** {risco}
+
+## 2. Especificações da Máquina / Linha
+- **Código da Máquina:** {maquina_codigo}
+- **Nome:** {maquina_nome}
+- **Modelo de CLP:** {modelo_clp}
+- **Protocolo de Comunicação:** {protocolo}
+
+## 3. Bill of Materials (BOM) — Lista de Componentes
+| Código | Descrição | Quantidade | Unidade | Valor Unitário | Valor Total |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+{bom_rows}| **TOTAL BOM** | | | | **R$ {total_bom:,.2f}** |
+
+## 4. Checklist e Planejamento de Comissionamento
+- **Dias Estimados:** {dias_est} dias
+- **Engenheiro Responsável Sugerido:** {eng_sug}
+
+### Etapas do Comissionamento:
+{etapas_str}
+### Riscos Identificados:
+{riscos_str}
+"""
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="Escopo_Tecnico_{id}.md"'
+    }
+    return Response(content=doc, media_type="text/markdown", headers=headers)
 
 
 @router.post("/{id}/documents")
@@ -316,27 +451,50 @@ async def submit_validation(
     if not projeto:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    comiss = (
+        db.query(Comissionamento)
+        .join(Maquina, Comissionamento.maquina_id == Maquina.id)
+        .filter(Maquina.id_projeto == id)
+        .first()
+    )
+    if not comiss:
+        raise HTTPException(status_code=404, detail="Associated Commissioning not found")
+
+    # Resolve active status string
+    c_status = comiss.status.value if hasattr(comiss.status, "value") else str(comiss.status)
+
     try:
-        incomplete = db.query(ProjetoPendencia).filter(
-            ProjetoPendencia.id_projeto == id,
-            ProjetoPendencia.concluida == False,
-        ).count()
-        if incomplete > 0:
-            raise HTTPException(
-                status_code=400,
-                detail=f"{incomplete} tasks still pending. Complete all tasks before submitting.",
-            )
+        new_status_str = ""
+        if c_status == StatusComissionamento.aguardando_dados.value:
+            # Stage 1 -> Stage 2: "documentation reviewed and approved" -> "in progress"
+            comiss.status = StatusComissionamento.em_andamento
+            projeto.status = "EM_ANDAMENTO"
+            db.flush()
+            db.add(ProjetoHistorico(
+                id=uuid_mod.uuid4(),
+                comissionamento_id=comiss.id,
+                acao_realizada="DOCUMENTATION_APPROVED",
+                id_usuario=str(usuario.id),
+                data_hora=datetime.utcnow(),
+            ))
+            new_status_str = "em_andamento"
 
-        projeto.status = "AGUARDANDO_VALIDACAO"
-        db.flush()
+        elif c_status == StatusComissionamento.em_andamento.value:
+            # Stage 2 -> Stage 3: "in progress" -> "pending invoice"
+            incomplete = db.query(ProjetoPendencia).filter(
+                ProjetoPendencia.id_projeto == id,
+                ProjetoPendencia.concluida == False,
+            ).count()
+            if incomplete > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{incomplete} tasks still pending. Complete all tasks before submitting.",
+                )
 
-        comiss = (
-            db.query(Comissionamento)
-            .join(Maquina, Comissionamento.maquina_id == Maquina.id)
-            .filter(Maquina.id_projeto == id)
-            .first()
-        )
-        if comiss:
+            comiss.status = StatusComissionamento.fat_pendente
+            comiss.fase_projeto = FaseProjeto.post_sale
+            projeto.status = "AGUARDANDO_VALIDACAO"
+            db.flush()
             db.add(ProjetoHistorico(
                 id=uuid_mod.uuid4(),
                 comissionamento_id=comiss.id,
@@ -344,12 +502,39 @@ async def submit_validation(
                 id_usuario=str(usuario.id),
                 data_hora=datetime.utcnow(),
             ))
+            new_status_str = "fat_pendente"
+
+        elif c_status == StatusComissionamento.fat_pendente.value:
+            # Stage 3 -> Stage 4: "pending invoice" -> "training stage"
+            perfil = usuario.perfil.value if hasattr(usuario.perfil, "value") else str(usuario.perfil)
+            if perfil not in (PerfilUsuario.engenharia.value, PerfilUsuario.ceo.value, "engenharia", "ceo"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Apenas engenheiros ou administradores podem aprovar esta etapa.",
+                )
+
+            comiss.status = StatusComissionamento.treinamento_operador
+            projeto.status = "TREINAMENTO"
+            db.flush()
+            db.add(ProjetoHistorico(
+                id=uuid_mod.uuid4(),
+                comissionamento_id=comiss.id,
+                acao_realizada="ENGINEERING_APPROVED",
+                id_usuario=str(usuario.id),
+                data_hora=datetime.utcnow(),
+            ))
+            new_status_str = "treinamento_operador"
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Operação inválida para o status atual: {c_status}",
+            )
 
         db.commit()
-        await notification_hub.notificar_status_projeto(id, "AGUARDANDO_VALIDACAO")
+        await notification_hub.notificar_status_projeto(id, projeto.status)
 
-        print(f"[DB WRITE CONFIRMED] project {id} advanced to AGUARDANDO_VALIDACAO")
-        return {"id_projeto": id, "new_status": "AGUARDANDO_VALIDACAO"}
+        print(f"[DB WRITE CONFIRMED] project {id} transitioned to {new_status_str} / project status {projeto.status}")
+        return {"id_projeto": id, "new_status": new_status_str}
 
     except HTTPException:
         db.rollback()

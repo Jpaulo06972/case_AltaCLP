@@ -4,14 +4,7 @@
   "functions": {
     "api/**/*.py": {
       "runtime": "@vercel/python@4.5.0",
-      "includeFiles": [
-        "backend/main.py",
-        "backend/database/**",
-        "backend/middleware/**",
-        "backend/routers/**",
-        "backend/schemas/**",
-        "backend/services/**"
-      ]
+      "includeFiles": "backend/{main.py,database/**,middleware/**,routers/**,schemas/**,services/**}"
     }
   },
   "rewrites": [

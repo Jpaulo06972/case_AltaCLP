@@ -32,14 +32,22 @@ export default function Login() {
       navigate(home, { replace: true });
     } catch (err: any) {
       const detail = err.response?.data?.detail;
-      const msg =
+      const errorObj = err.response?.data?.error;
+      let msg =
         (typeof detail === "object" && detail?.mensagem) ||
         (typeof detail === "string" && detail) ||
         err.response?.data?.mensagem ||
-        err.response?.data?.error ||
+        (typeof errorObj === "object" && errorObj?.message) ||
+        (typeof errorObj === "object" && errorObj?.mensagem) ||
+        (typeof errorObj === "string" && errorObj) ||
         (err.code === "ERR_NETWORK"
           ? "Não foi possível conectar à API. Verifique VITE_API_URL no Vercel."
           : null);
+
+      if (msg && typeof msg === "object") {
+        msg = JSON.stringify(msg);
+      }
+
       setError(msg || "Credenciais inválidas. Tente novamente.");
       console.error("[Login]", err.response?.status, err.response?.data || err.message);
     } finally {

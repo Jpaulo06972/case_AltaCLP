@@ -35,9 +35,17 @@ const icons = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((message: string, type: Toast["type"] = "info") => {
+  const addToast = useCallback((message: any, type: Toast["type"] = "info") => {
     const id = crypto.randomUUID();
-    setToasts((prev) => [...prev, { id, message, type }]);
+    let msgString = message;
+    if (msgString && typeof msgString === "object") {
+      msgString = msgString.message || msgString.mensagem || JSON.stringify(msgString);
+    } else if (msgString === undefined || msgString === null) {
+      msgString = "";
+    } else {
+      msgString = String(msgString);
+    }
+    setToasts((prev) => [...prev, { id, message: msgString, type }]);
 
     // Auto-dismiss after 4s
     setTimeout(() => {

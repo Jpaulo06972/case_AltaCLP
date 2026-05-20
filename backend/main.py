@@ -26,19 +26,7 @@ from services.notificacoes_ws import notification_hub
 async def lifespan(app: FastAPI):
     """Startup: cria tabelas, roda seed se vazio, inicia simulador."""
     print("[API] Iniciando AltaCLP Intelligence Platform...")
-    init_db()
-
-    # Seed automático se banco vazio
-    db = SessionLocal()
-    try:
-        if db.query(Cliente).count() == 0:
-            print("[API] Banco vazio — executando seed...")
-            from database.seed import run_seed
-            run_seed()
-    except Exception as e:
-        print(f"[API] Erro no seed automático: {e}")
-    finally:
-        db.close()
+    _ensure_db_ready()
 
     # Inicia simulador de telemetria em background
     task = asyncio.create_task(TelemetriaSimulator.loop_simulacao())
@@ -49,6 +37,36 @@ async def lifespan(app: FastAPI):
     TelemetriaSimulator.parar()
     task.cancel()
     print("[API] Plataforma encerrada.")
+
+
+# ── Inicialização sob demanda (essencial para Vercel Serverless) ──────────
+# Na Vercel, o lifespan ASGI NÃO é executado. Este flag + middleware
+# garantem que o banco é criado e populado no primeiro request (cold start).
+_db_initialized = False
+
+
+def _ensure_db_ready():
+    """Cria tabelas e roda seed se banco estiver vazio. Idempotente."""
+    global _db_initialized
+    if _db_initialized:
+        return
+    print("[API] _ensure_db_ready: inicializando banco de dados...")
+    init_db()
+
+    db = SessionLocal()
+    try:
+        if db.query(Cliente).count() == 0:
+            print("[API] Banco vazio — executando seed...")
+            from database.seed import run_seed
+            run_seed()
+    except Exception as e:
+        print(f"[API] Erro no seed automático: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        db.close()
+    _db_initialized = True
+    print("[API] _ensure_db_ready: banco pronto!")
 
 
 app = FastAPI(
@@ -75,6 +93,16 @@ app.add_middleware(
 )
 app.add_middleware(RouteLogMiddleware)
 app.state.notification_hub = notification_hub
+
+
+# ── Middleware de inicialização (garante DB pronto na Vercel) ──────────────
+# Na Vercel Serverless, o lifespan ASGI não é chamado. Este middleware
+# garante que init_db() + seed rodem antes de qualquer request.
+# Graças ao flag _db_initialized, só executa de verdade uma vez (cold start).
+@app.middleware("http")
+async def ensure_db_middleware(request: Request, call_next):
+    _ensure_db_ready()
+    return await call_next(request)
 
 
 @app.exception_handler(Exception)

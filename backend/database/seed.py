@@ -55,8 +55,8 @@ DIST_MAQUINAS = [(0,8),(1,6),(2,5),(3,5),(4,4),(5,4),(6,6),(7,4),(8,4),(9,4)]
 
 
 def run_seed():
-    print("[SEED] Limpando e recriando tabelas (forçado)...")
-    Base.metadata.drop_all(bind=engine)
+    # Cria tabelas sem destruir dados existentes (seguro para ambientes efêmeros)
+    print("[SEED] Criando tabelas (se não existirem)...")
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
 

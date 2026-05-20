@@ -56,6 +56,7 @@ app = FastAPI(
     description="Plataforma de Inteligência Operacional — HomoDeus × AltaCLP",
     version="1.0.0",
     lifespan=lifespan,
+    root_path="/_backend" if os.getenv("VERCEL") == "1" else "",
 )
 
 # CORS — inclui domínio Vercel automaticamente em produção

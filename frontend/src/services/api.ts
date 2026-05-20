@@ -5,10 +5,10 @@
 
 import axios from "axios";
 
-/** Produção Vercel: backend em /_backend (ver vercel.json). Dev: localhost:8000 */
+/** Produção Vercel: backend em /api/v1 (ver vercel.json rewrites). Dev: localhost:8000 */
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? "/_backend/api/v1" : "http://localhost:8000/api/v1");
+  (import.meta.env.PROD ? "/api/v1" : "http://localhost:8000/api/v1");
 
 const api = axios.create({
   baseURL: API_BASE_URL,

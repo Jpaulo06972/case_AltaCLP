@@ -32,7 +32,7 @@ Com essa arquitetura em mente, nosso roadmap de 12 semanas é focado em entregas
 
 # 9 - Retorno sobre o Investimento (ROI)
 
-O mais importante para vocês, como executivos, é o retorno sobre o investimento. A plataforma HomoDeus se paga em poucos meses, gerando um valor total de R$ 2.520.000 no primeiro ano de operação plena. Isso inclui R$ 376.800 por ano em economia de falsos alertas, R$ 1.603.200 em recuperação de vendas (comissionamento) e R$ 540.000 em prevenção de riscos (drift de código). Esses números mostram que a HomoDeus não é apenas uma despesa, mas um investimento estratégico com um ROI comprovado de 272x. E agora, vamos aos próximos passos para concretizar essa transformação.
+O mais importante para vocês, como executivos, é o retorno sobre o investimento. O investimento total para a Plataforma HomoDeus é de **R$ 150.000**, dividido em três fases. Já na Fase 1, com um investimento de R$ 45.000, vocês terão um **payback imediato**, em menos de 6 semanas, devido à mitigação de riscos e ganhos de eficiência. No primeiro ano de operação plena, a plataforma gera um valor total de **R$ 2.520.000**, o que representa um **ROI de 16.8x**. Este valor é composto por R$ 376.800 em economia de falsos alertas, R$ 1.603.200 em recuperação de vendas (comissionamento) e R$ 540.000 em prevenção de riscos (drift de código). O gráfico de fluxo mensal demonstra claramente como a plataforma elimina as perdas, transformando o cenário atual em um fluxo positivo. A HomoDeus não é uma despesa, mas um investimento estratégico com um retorno comprovado e rápido. E agora, vamos aos próximos passos para concretizar essa transformação.
 
 # 10 - Conclusão e Próximos Passos
 

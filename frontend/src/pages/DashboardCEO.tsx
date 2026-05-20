@@ -357,45 +357,7 @@ export default function DashboardCEO() {
         </div>
       </div>
 
-      {/* ━━ ROI Summary ━━ */}
-      <div className="apple-card p-6">
-        <h3 className="text-[15px] font-semibold text-apple-label mb-4">
-          ROI do Projeto
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {[
-            {
-              label: "Investimento",
-              value: `R$ ${((roi.investimento || 150000) / 1000).toFixed(0)}k`,
-              color: "text-apple-blue",
-            },
-            {
-              label: "Retorno Ano 1",
-              value: `R$ ${((roi.retorno_ano1 || 1320000) / 1000000).toFixed(2)}M`,
-              color: "text-apple-green",
-            },
-            {
-              label: "Múltiplo ROI",
-              value: `${roi.roi_multiplo || 8.8}x`,
-              color: "text-apple-green",
-            },
-            {
-              label: "Payback",
-              value: `${roi.payback_semanas || 6} semanas`,
-              color: "text-apple-blue",
-            },
-          ].map((item) => (
-            <div key={item.label} className="text-center">
-              <p className="text-[12px] text-apple-tertiary font-medium mb-1">
-                {item.label}
-              </p>
-              <p className={`text-[24px] font-bold tracking-tight ${item.color}`}>
-                {item.value}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
+
     </div>
   );
 }

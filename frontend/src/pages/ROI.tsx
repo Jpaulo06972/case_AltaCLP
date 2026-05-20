@@ -75,8 +75,8 @@ export default function ROI() {
           <div className="flex gap-8">
             {[
               { label: "Investimento", value: "R$ 150k", color: "text-apple-blue" },
-              { label: "Retorno Ano 1", value: "R$ 1.32M", color: "text-apple-green" },
-              { label: "ROI", value: "8.8x", color: "text-apple-green" },
+              { label: "Retorno Ano 1", value: "R$ 2.52M", color: "text-apple-green" },
+              { label: "ROI", value: "16.8x", color: "text-apple-green" },
               { label: "Payback", value: "< 6 sem.", color: "text-apple-blue" },
             ].map((m) => (
               <div key={m.label} className="text-center">
